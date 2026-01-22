@@ -4,7 +4,7 @@
 
 function handleProductosGet(action, id, almacenId) {
   switch (action.toLowerCase()) {
-    case 'getall': return almacenId ? getAllProductosByAlmacen(almacenId) : createErrorResponse('almacenId requerido', 400);
+    case 'getall': return almacenId ? getAllProductosByAlmacen(almacenId) : getAllProductos();
     case 'getbyid': return getProductoById(id);
     default: return createErrorResponse('Acción no válida', 400);
   }
@@ -90,6 +90,76 @@ function getAllProductosByAlmacen(almacenId) {
         return createResponse(false, null, error.toString());
     }
 }
+
+function getAllProductos() {
+    try {
+        const sheet = getSheet(SHEET_NAMES.PRODUCTOS_ALMACEN);
+        const data = sheet.getDataRange().getValues();
+        
+        if (data.length <= 1) return createResponse(true, []);
+        
+        // DYNAMIC COLUMN MAPPING
+        const colMap = findColumnIndices(sheet, {
+            ID: ['ID', 'ID_PRODUCTO', 'CODIGO'],
+            ALMACEN_ID: ['ALMACEN_ID', 'ID_ALMACEN'],
+            NOMBRE: ['NOMBRE', 'NOMBRE_PRODUCTO'],
+            CATEGORIA: ['CATEGORIA'],
+            CANTIDAD: ['CANTIDAD', 'STOCK'],
+            UNIDAD: ['UNIDAD', 'MEDIDA'],
+            STOCK_MIN: ['STOCK_MINIMO', 'MINIMO'],
+            VALOR: ['VALOR_UNITARIO', 'PRECIO', 'VALOR'],
+            FECHA: ['FECHA_INGRESO', 'FECHA'],
+            PROVEEDOR: ['PROVEEDOR_PRINCIPAL', 'PROVEEDOR'],
+            ESTADO: ['ESTADO'],
+            RETORNABLE: ['RETORNABLE', 'ES_RETORNABLE'],
+            EN_USO: ['EN_USO', 'CANTIDAD_EN_USO', 'EN USO'],
+            ACTIVO: ['ES_ACTIVO', 'ACTIVO']
+        });
+
+        const productos = [];
+        for (let i = 1; i < data.length; i++) {
+            const row = data[i];
+            
+            const idIdx = colMap.ID !== -1 ? colMap.ID : COLUMNS.PRODUCTOS_ALMACEN.ID;
+            if (!row[idIdx]) continue;
+            
+            const almIdx = colMap.ALMACEN_ID !== -1 ? colMap.ALMACEN_ID : COLUMNS.PRODUCTOS_ALMACEN.ALMACEN_ID;
+            const nmIdx = colMap.NOMBRE !== -1 ? colMap.NOMBRE : COLUMNS.PRODUCTOS_ALMACEN.NOMBRE;
+            const catIdx = colMap.CATEGORIA !== -1 ? colMap.CATEGORIA : COLUMNS.PRODUCTOS_ALMACEN.CATEGORIA;
+            const cantIdx = colMap.CANTIDAD !== -1 ? colMap.CANTIDAD : COLUMNS.PRODUCTOS_ALMACEN.CANTIDAD;
+            const unIdx = colMap.UNIDAD !== -1 ? colMap.UNIDAD : COLUMNS.PRODUCTOS_ALMACEN.UNIDAD;
+            const minIdx = colMap.STOCK_MIN !== -1 ? colMap.STOCK_MIN : COLUMNS.PRODUCTOS_ALMACEN.STOCK_MINIMO;
+            const valIdx = colMap.VALOR !== -1 ? colMap.VALOR : COLUMNS.PRODUCTOS_ALMACEN.VALOR_UNITARIO;
+            const fecIdx = colMap.FECHA !== -1 ? colMap.FECHA : COLUMNS.PRODUCTOS_ALMACEN.FECHA_INGRESO;
+            const prvIdx = colMap.PROVEEDOR !== -1 ? colMap.PROVEEDOR : COLUMNS.PRODUCTOS_ALMACEN.PROVEEDOR_PRINCIPAL;
+            const estIdx = colMap.ESTADO !== -1 ? colMap.ESTADO : COLUMNS.PRODUCTOS_ALMACEN.ESTADO;
+            const retIdx = colMap.RETORNABLE !== -1 ? colMap.RETORNABLE : COLUMNS.PRODUCTOS_ALMACEN.ES_RETORNABLE;
+            const usoIdx = colMap.EN_USO !== -1 ? colMap.EN_USO : COLUMNS.PRODUCTOS_ALMACEN.CANTIDAD_EN_USO;
+            const actIdx = colMap.ACTIVO !== -1 ? colMap.ACTIVO : COLUMNS.PRODUCTOS_ALMACEN.ES_ACTIVO;
+
+            productos.push({
+                id: row[idIdx],
+                almacenId: row[almIdx],
+                nombre: row[nmIdx],
+                categoria: row[catIdx],
+                cantidad: Number(String(row[cantIdx] || '0').replace(/[^0-9.]/g, '')) || 0,
+                unidad: String(row[unIdx] || ''),
+                stockMinimo: Number(String(row[minIdx] || '0').replace(/[^0-9.]/g, '')) || 0,
+                valorUnitario: Number(String(row[valIdx] || '0').replace(/[^0-9.]/g, '')) || 0,
+                fechaIngreso: row[fecIdx],
+                proveedorPrincipal: row[prvIdx],
+                estado: row[estIdx],
+                esRetornable: checkBoolean(row[retIdx]),
+                cantidadEnUso: Number(row[usoIdx] || 0),
+                esActivo: checkBoolean(row[actIdx])
+            });
+        }
+        return createResponse(true, productos);
+    } catch (error) {
+        return createResponse(false, null, error.toString());
+    }
+}
+
 
 function getProductoById(id) {
     try {

@@ -12,6 +12,7 @@ interface ActivoFormProps {
     onClose: () => void;
     onSubmit: (data: ActivoFormData) => Promise<void>;
     almacenes?: any[]; // Allow passing list of warehouses
+    initialData?: any;
 }
 
 export function ActivoForm({ open, onClose, onSubmit, initialData, almacenes = [] }: ActivoFormProps) {

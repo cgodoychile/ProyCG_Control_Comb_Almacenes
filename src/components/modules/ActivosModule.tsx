@@ -142,11 +142,11 @@ export function ActivosModule() {
             queryClient.invalidateQueries({ queryKey: ['almacenes'] });
           } else {
             console.error('Error auto-creating product:', prodResponse);
-            toast({ variant: "warning", title: "⚠️ Atención", description: "Activo creado, pero falló la creación automática del producto en bodega." });
+            toast({ title: "⚠️ Atención", description: "Activo creado, pero falló la creación automática del producto en bodega." });
           }
         } catch (e) {
           console.error('Exception auto-creating product:', e);
-          toast({ variant: "warning", title: "⚠️ Atención", description: "Ocurrió un error al intentar crear el producto en bodega." });
+          toast({ title: "⚠️ Atención", description: "Ocurrió un error al intentar crear el producto en bodega." });
         }
       }
     }

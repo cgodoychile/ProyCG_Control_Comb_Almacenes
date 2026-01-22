@@ -48,11 +48,13 @@ export function MobileNav({ activeModule, onModuleChange }: MobileNavProps) {
         { id: 'activos', icon: Package, label: 'Activos' },
         { id: 'alertas', icon: Bell, label: 'Alertas' },
         { id: 'almacenes', icon: Warehouse, label: 'Almacenes' },
+        { id: 'personas', icon: User, label: 'Personas' },
         { id: 'reportes', icon: FileText, label: 'Reportes' },
     ];
 
     if (isAdmin) {
         secondaryItems.push({ id: 'usuarios', icon: User, label: 'Usuarios' });
+        secondaryItems.push({ id: 'auditoria', icon: Database, label: 'Auditoría' });
     }
 
     return (

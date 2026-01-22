@@ -46,6 +46,7 @@ interface AlmacenesModuleProps {
 }
 
 import { ProductTrackingDialog } from './ProductTrackingDialog';
+import { GlobalProductSearchDialog } from './GlobalProductSearchDialog';
 
 export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
     const { toast } = useToast();
@@ -67,6 +68,7 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
     const [movimientoFilter, setMovimientoFilter] = useState<'todos' | 'entrada' | 'salida'>('todos');
     const [isScannerOpen, setIsScannerOpen] = useState(false);
     const [printingProducto, setPrintingProducto] = useState<any>(null);
+    const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
     const [movimientoInitialData, setMovimientoInitialData] = useState<any>(null);
     const labelRef = useRef<HTMLDivElement>(null);
 
@@ -368,6 +370,15 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                         size="sm"
                         variant="outline"
                         className="gap-2 border-accent text-accent hover:bg-accent/10"
+                        onClick={() => setIsGlobalSearchOpen(true)}
+                    >
+                        <Search className="w-4 h-4" />
+                        BÚSQUEDA GLOBAL
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-2 border-accent text-accent hover:bg-accent/10"
                         onClick={() => setIsWarehouseSelectionOpen(true)}
                     >
                         <FileText className="w-4 h-4" />
@@ -593,7 +604,7 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                             <div className="relative flex-1 sm:min-w-[200px]">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                                 <Input
-                                    placeholder="Buscar..."
+                                    placeholder="Buscar en este almacén..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     className="pl-9 h-9 bg-secondary/50"
@@ -776,7 +787,7 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
 
                                         return (
                                             <tr key={m.id} className="hover:bg-primary/5 transition-colors">
-                                                <td className="px-6 py-4 whitespace-nowrap">{new Date(m.fecha).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap">{new Date(m.fecha).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Santiago' })}</td>
                                                 <td className="px-6 py-4">
                                                     <span className={cn(
                                                         "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase",
@@ -966,6 +977,11 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            <GlobalProductSearchDialog
+                open={isGlobalSearchOpen}
+                onClose={() => setIsGlobalSearchOpen(false)}
+            />
 
             {/* Escáner de Códigos */}
             <BarcodeScanner

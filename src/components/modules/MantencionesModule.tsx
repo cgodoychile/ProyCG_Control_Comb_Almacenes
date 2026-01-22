@@ -20,7 +20,15 @@ export function MantencionesModule() {
     const formatSafeDate = (dateString: string | null | undefined) => {
         if (!dateString || dateString === '') return '-';
         try {
-            return format(parseISO(dateString), 'dd/MM/yyyy', { locale: es });
+            return new Intl.DateTimeFormat('es-CL', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+                timeZone: 'America/Santiago'
+            }).format(new Date(dateString));
         } catch {
             return '-';
         }

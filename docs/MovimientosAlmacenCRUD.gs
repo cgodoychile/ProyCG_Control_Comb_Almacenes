@@ -17,11 +17,22 @@ function handleMovimientosPost(action, id, data) {
   }
 }
 
+
 function getAllMovimientos() {
     try {
         const sheet = getSheet(SHEET_NAMES.MOVIMIENTOS_ALMACEN);
         const data = sheet.getDataRange().getValues();
         
+        // CACHE DE PRODUCTOS
+        const prodSheet = getSheet(SHEET_NAMES.PRODUCTOS_ALMACEN);
+        const prodData = prodSheet.getDataRange().getValues();
+        const productMap = {};
+        for (let j = 1; j < prodData.length; j++) {
+            const pId = String(prodData[j][COLUMNS.PRODUCTOS_ALMACEN.ID] || '').trim();
+            const pNombre = prodData[j][COLUMNS.PRODUCTOS_ALMACEN.NOMBRE];
+            if (pId) productMap[pId] = pNombre;
+        }
+
         if (data.length <= 1) return createResponse(true, []);
         
         const movimientos = [];
@@ -43,7 +54,7 @@ function getAllMovimientos() {
                 OBSERVACIONES: ['OBSERVACIONES'],
                 FECHA_DEVOLUCION: ['FECHA_DEVOLUCION', 'DEVOLUCION_ESTIMADA', 'RETORNO_ESTIMADO', 'FECHA_LIMITE']
             });
-
+            
             // Fallback indices
             const idIdx = colMap.ID !== -1 ? colMap.ID : COLUMNS.MOVIMIENTOS_ALMACEN.ID;
             const pIdIdx = colMap.PROD_ID !== -1 ? colMap.PROD_ID : COLUMNS.MOVIMIENTOS_ALMACEN.PRODUCTO_ID;
@@ -69,9 +80,12 @@ function getAllMovimientos() {
                 continue;
             }
 
+            const prodNombre = productMap[prodId] || 'Producto desconocido';
+
             movimientos.push({
                 id: id,
                 productoId: prodId,
+                productoNombre: prodNombre,
                 tipo: row[tipoIdx],
                 almacenOrigen: row[orgIdx],
                 almacenDestino: row[destIdx],
@@ -80,7 +94,6 @@ function getAllMovimientos() {
                 responsable: row[rspIdx],
                 guiaReferencia: row[guiaIdx],
                 motivo: row[motIdx],
-                proveedorTransporte: row[prvIdx],
                 proveedorTransporte: row[prvIdx],
                 observaciones: row[obsIdx],
                 fechaDevolucion: row[fdevIdx]
@@ -92,11 +105,25 @@ function getAllMovimientos() {
     }
 }
 
+
+
 function getMovimientosByAlmacen(almacenId) {
     try {
         const sheet = getSheet(SHEET_NAMES.MOVIMIENTOS_ALMACEN);
         const data = sheet.getDataRange().getValues();
         
+        // CACHE DE PRODUCTOS (Optimizacion)
+        const prodSheet = getSheet(SHEET_NAMES.PRODUCTOS_ALMACEN);
+        const prodData = prodSheet.getDataRange().getValues();
+        const productMap = {};
+        
+        // Crear mapa ID -> Nombre
+        for (let j = 1; j < prodData.length; j++) {
+            const pId = String(prodData[j][COLUMNS.PRODUCTOS_ALMACEN.ID] || '').trim();
+            const pNombre = prodData[j][COLUMNS.PRODUCTOS_ALMACEN.NOMBRE];
+            if (pId) productMap[pId] = pNombre;
+        }
+
         if (data.length <= 1) return createResponse(true, []);
         
         const movimientos = [];
@@ -144,9 +171,13 @@ function getMovimientosByAlmacen(almacenId) {
             const isDestination = String(row[destIdx]) === String(almacenId);
             
             if (isOrigin || isDestination) {
+                // RESOLVE NAME: Use cached map
+                const prodNombre = productMap[prodId] || 'Producto desconocido';
+
                 movimientos.push({
                     id: id,
                     productoId: prodId,
+                    productoNombre: prodNombre, // NEW FIELD
                     tipo: row[tipoIdx],
                     almacenOrigen: row[orgIdx],
                     almacenDestino: row[destIdx],
@@ -166,6 +197,7 @@ function getMovimientosByAlmacen(almacenId) {
         return createResponse(false, null, error.toString());
     }
 }
+
 
 function createMovimiento(data) {
     try {

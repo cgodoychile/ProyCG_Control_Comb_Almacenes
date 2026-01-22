@@ -128,7 +128,15 @@ export function ProductTrackingDialog({ isOpen, onClose, producto, movimientos, 
         try {
             const date = parseDateValues(dateString);
             if (!date) return dateString;
-            return format(date, "d 'de' MMMM, yyyy HH:mm", { locale: es });
+            return new Intl.DateTimeFormat('es-CL', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+                timeZone: 'America/Santiago'
+            }).format(date);
         } catch (e) {
             return dateString;
         }

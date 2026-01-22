@@ -238,7 +238,7 @@ export function PersonasModule() {
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="flex gap-1 justify-end transition-opacity">
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
