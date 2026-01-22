@@ -1,7 +1,6 @@
-// API Configuration
 export const API_CONFIG = {
-  // Use environment variable from .env file
-  BASE_URL: import.meta.env.VITE_API_URL || '',
+  // Use environment variable or fallback to production URL
+  BASE_URL: import.meta.env.VITE_API_URL || 'https://script.google.com/macros/s/AKfycbwS-FXUFEmVD7VxYcSbacsfbHgZr1uTbUzNvqK9J4SlldB4vHAr-bex9MKRNp34qB8aPg/exec',
   TIMEOUT: 30000, // 30 seconds
 };
 

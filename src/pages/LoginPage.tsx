@@ -7,7 +7,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Fuel, Loader2, Lock, User } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
-import enelLogo from '@/assets/enel-logo.png';
+// import enelLogo from '@/assets/enel-logo.png'; // Using public folder directly for stability
+const enelLogo = '/enel-logo.png';
 
 export function LoginPage() {
     const [email, setEmail] = useState('');
