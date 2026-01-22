@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { useAlerts } from '@/hooks/useAlerts';
 import { Button } from '@/components/ui/button';
+import profilePhoto from '@/assets/LogoId.png';
 
 interface SidebarProps {
   activeModule: string;
@@ -61,7 +62,7 @@ export function Sidebar({ activeModule, onModuleChange }: SidebarProps) {
         {/* ... (no change) */}
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center shadow-lg overflow-hidden p-0 border-2 border-primary/30">
-            <img src="/profile-photo.png" alt="Profile" className="w-full h-full object-cover rounded-full" />
+            <img src={profilePhoto} alt="Profile" className="w-full h-full object-cover rounded-full" />
           </div>
           {!collapsed && (
             <div className="animate-fade-in">

@@ -7,8 +7,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Fuel, Loader2, Lock, User } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
-// import enelLogo from '@/assets/enel-logo.png'; // Using public folder directly for stability
-const enelLogo = '/enel-logo.png';
+import enelLogo from '@/assets/enel-logo.png';
+import profilePhoto from '@/assets/LogoId.png';
 
 export function LoginPage() {
     const [email, setEmail] = useState('');
@@ -58,7 +58,7 @@ export function LoginPage() {
                     </div>
                     <div className="flex flex-col items-center">
                         <div className="w-16 h-16 bg-gradient-to-br from-primary/20 to-accent/20 rounded-full flex items-center justify-center mb-4 text-primary shadow-lg overflow-hidden p-0 border-2 border-primary/30">
-                            <img src="/profile-photo.png" alt="Profile" className="w-full h-full object-cover rounded-full" />
+                            <img src={profilePhoto} alt="Profile" className="w-full h-full object-cover rounded-full" />
                         </div>
                         <div className="text-center">
                             <CardTitle className="text-2xl font-bold text-gray-800 dark:text-gray-100">ProyCG</CardTitle>
