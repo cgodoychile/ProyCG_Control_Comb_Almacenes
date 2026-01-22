@@ -10,6 +10,7 @@ import NotFound from "./pages/NotFound";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { AlertsProvider } from "@/context/AlertsContext";
 import { LoginPage } from "./pages/LoginPage";
+import { SyncManager } from "@/components/SyncManager";
 
 const queryClient = new QueryClient();
 
@@ -39,6 +40,7 @@ const App = () => (
         <AuthProvider>
           <AlertsProvider>
             <BrowserRouter>
+              <SyncManager />
               <Toaster />
               <Sonner />
               <Routes>

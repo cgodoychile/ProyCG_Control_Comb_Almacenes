@@ -29,6 +29,8 @@ export const buildApiUrl = (entity: string, action: string, id?: string, extraPa
   return url.toString();
 };
 
+import { offlineStorage } from './offlineStorage';
+
 export const apiFetch = async <T>(
   entity: string,
   action: string,
@@ -40,6 +42,20 @@ export const apiFetch = async <T>(
   }
 ): Promise<ApiResponse<T>> => {
   const { id, method = 'GET', body, params } = options || {};
+
+  // Check connectivity
+  if (!navigator.onLine && method === 'POST') {
+    console.warn(`📴 [API] Offline detected. Queuing ${entity}/${action}`);
+    offlineStorage.enqueue({ entity, action, method, body, params });
+
+    // Return a synthetic successful response to keep UI responsive
+    return {
+      success: true,
+      data: null as any,
+      message: 'Registrado localmente (pendiente de sincronización)',
+      statusCode: 202, // Accepted
+    };
+  }
 
   try {
     const url = buildApiUrl(entity, action, id, params);
@@ -77,6 +93,19 @@ export const apiFetch = async <T>(
     return data;
   } catch (error) {
     console.error('API Error:', error);
+
+    // If fetch failed due to network, queue it
+    if (method === 'POST') {
+      console.warn('🔄 [API] Fetch failed, queuing request...');
+      offlineStorage.enqueue({ entity, action, method, body, params });
+      return {
+        success: true,
+        data: null as any,
+        message: 'Error de red. Guardado localmente para sincronizar luego.',
+        statusCode: 202,
+      };
+    }
+
     return {
       success: false,
       data: null,
