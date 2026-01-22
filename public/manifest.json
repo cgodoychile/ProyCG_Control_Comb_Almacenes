@@ -1,6 +1,6 @@
 {
-    "name": "Fuel Flow Tracker Pro",
-    "short_name": "FuelCRM",
+    "name": "ProyCG - Gestión de Combustible",
+    "short_name": "ProyCG",
     "start_url": "/",
     "display": "standalone",
     "background_color": "#ffffff",
