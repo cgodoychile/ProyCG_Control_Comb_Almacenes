@@ -1,0 +1,447 @@
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { cargasApi, estanquesApi, agendamientosApi } from '@/lib/apiService';
+import { CargaForm } from '@/components/forms/CargaForm';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Plus, FileText, TrendingUp, Loader2, Edit, Trash2, AlertTriangle } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { CargaFormData } from '@/lib/validations';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { useAuth } from '@/context/AuthContext';
+import { cn } from '@/lib/utils';
+
+export function CargasModule() {
+  const { canEdit } = useAuth();
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingCarga, setEditingCarga] = useState<any>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [cargaToDelete, setCargaToDelete] = useState<any>(null);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // Fetch data
+  const { data: cargasResponse, isLoading: loadingCargas } = useQuery({
+    queryKey: ['cargas'],
+    queryFn: cargasApi.getAll,
+    refetchInterval: 30000,
+  });
+
+  const { data: estanquesResponse } = useQuery({
+    queryKey: ['estanques'],
+    queryFn: estanquesApi.getAll,
+  });
+
+  const cargasData = cargasResponse?.data || [];
+  const estanques = estanquesResponse?.data || [];
+
+  // Create mutation with stock update
+  const createMutation = useMutation({
+    mutationFn: async (data: CargaFormData) => {
+      // If programmed, use agendamientosApi
+      if (data.tipo === 'programada') {
+        return await agendamientosApi.create(data);
+      }
+
+      // Create the real carga
+      const result = await cargasApi.create(data);
+
+      // Update estanque stock for REAL loads
+      const estanque = estanques.find(e => e.nombre === data.estanque);
+      if (estanque) {
+        const nuevoStock = estanque.stockActual + data.litros;
+        await estanquesApi.update(estanque.id, {
+          stockActual: nuevoStock,
+        });
+      }
+
+      return result;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cargas'] });
+      queryClient.invalidateQueries({ queryKey: ['estanques'] });
+      queryClient.invalidateQueries({ queryKey: ['agendamientos'] });
+      toast({
+        title: "✅ Carga registrada",
+        description: "La carga se ha registrado y el stock del estanque se ha actualizado.",
+      });
+      setIsFormOpen(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "❌ Error",
+        description: error.message || "No se pudo registrar la carga.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Update mutation
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<CargaFormData> }) =>
+      cargasApi.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cargas'] });
+      toast({
+        title: "✅ Carga actualizada",
+        description: "La carga se ha actualizado exitosamente.",
+      });
+      setIsFormOpen(false);
+      setEditingCarga(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "❌ Error",
+        description: error.message || "No se pudo actualizar la carga.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      // Find the load to know how many liters to subtract
+      const carga = cargasData.find(c => c.id === id);
+      const result = await cargasApi.delete(id);
+
+      if (carga && carga.tipo !== 'programada') {
+        const estanque = estanques.find(e => e.nombre === carga.estanque);
+        if (estanque) {
+          await estanquesApi.update(estanque.id, {
+            stockActual: estanque.stockActual - (carga.litros || 0)
+          });
+        }
+      }
+      return result;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cargas'] });
+      queryClient.invalidateQueries({ queryKey: ['estanques'] });
+      toast({
+        title: "✅ Carga eliminada",
+        description: "La carga se ha eliminado y el stock se ha ajustado.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "❌ Error",
+        description: error.message || "No se pudo eliminar la carga.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSubmit = async (data: CargaFormData) => {
+    if (editingCarga) {
+      await updateMutation.mutateAsync({ id: editingCarga.id, data });
+    } else {
+      await createMutation.mutateAsync(data);
+    }
+  };
+
+  const handleEdit = (e: React.MouseEvent, carga: any) => {
+    e.stopPropagation();
+    console.log('Editando carga:', carga);
+    setEditingCarga(carga);
+    setIsFormOpen(true);
+  };
+
+  const handleDelete = (e: React.MouseEvent, carga: any) => {
+    e.stopPropagation();
+    console.log('Solicitando eliminación de carga:', carga);
+    setCargaToDelete(carga);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (cargaToDelete) {
+      console.log('Confirmando eliminación de carga ID:', cargaToDelete.id);
+      await deleteMutation.mutateAsync(cargaToDelete.id);
+      setIsDeleteDialogOpen(false);
+      setCargaToDelete(null);
+    }
+  };
+
+  const handleNuevaCarga = () => {
+    setEditingCarga(null);
+    setIsFormOpen(true);
+  };
+
+  // Filter to show only real loads in the table and sort by date desc
+  const filteredCargas = cargasData
+    .filter(c => c.tipo !== 'programada')
+    .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+
+  // Calculate stats using only real loads
+  const totalLitrosMes = filteredCargas
+    .filter(c => {
+      const fecha = new Date(c.fecha);
+      const hoy = new Date();
+      return fecha.getMonth() === hoy.getMonth() && fecha.getFullYear() === hoy.getFullYear();
+    })
+    .reduce((sum, c) => sum + (c.litros || 0), 0);
+
+  const proveedoresActivos = [...new Set(filteredCargas.map(c => c.proveedor))].length;
+
+  // Format date safely
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '-';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return '-';
+      return format(date, 'dd/MM/yyyy', { locale: es });
+    } catch {
+      return '-';
+    }
+  };
+
+  if (loadingCargas) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="ml-2 text-muted-foreground">Cargando cargas desde Google Sheets...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+        <div>
+          <p className="text-muted-foreground">Gestión de recargas de combustible</p>
+        </div>
+        {canEdit && (
+          <Button
+            size="sm"
+            className="gap-2 bg-accent text-accent-foreground hover:bg-accent/90"
+            onClick={handleNuevaCarga}
+          >
+            <Plus className="w-4 h-4" />
+            Nueva Carga
+          </Button>
+        )}
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="card-fuel p-6 rounded-xl border border-border">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-accent/20 flex items-center justify-center">
+              <TrendingUp className="w-6 h-6 text-accent" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-foreground">
+                {totalLitrosMes.toLocaleString()} L
+              </p>
+              <p className="text-sm text-muted-foreground">Compras este mes</p>
+            </div>
+          </div>
+        </div>
+        <div className="card-fuel p-6 rounded-xl border border-border">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-success/20 flex items-center justify-center">
+              <FileText className="w-6 h-6 text-success" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-foreground">{cargasData.length}</p>
+              <p className="text-sm text-muted-foreground">Cargas registradas</p>
+            </div>
+          </div>
+        </div>
+        <div className="card-fuel p-6 rounded-xl border border-border">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
+              <FileText className="w-6 h-6 text-primary" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-foreground">{proveedoresActivos}</p>
+              <p className="text-sm text-muted-foreground">Proveedores activos</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Data Table */}
+      {cargasData.length === 0 ? (
+        <div className="card-fuel p-12 rounded-xl border border-border text-center">
+          <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+          <h3 className="font-semibold text-foreground mb-2">Sin cargas registradas</h3>
+          <p className="text-muted-foreground mb-4">
+            Registra la primera carga de combustible
+          </p>
+          {canEdit && (
+            <Button
+              className="gap-2 bg-accent text-accent-foreground hover:bg-accent/90"
+              onClick={handleNuevaCarga}
+            >
+              <Plus className="w-4 h-4" />
+              Nueva Carga
+            </Button>
+          )}
+        </div>
+      ) : (
+        <div className="card-fuel rounded-xl border border-border overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="data-table">
+              <thead className="bg-secondary/50">
+                <tr>
+                  <th>Fecha</th>
+                  <th>N° Guía/Factura</th>
+                  <th>Tipo</th>
+                  <th>Estanque</th>
+                  <th>Proveedor</th>
+                  <th>Patente</th>
+                  <th>Conductor</th>
+                  <th>Litros</th>
+                  <th>Responsable</th>
+                  <th>Observaciones</th>
+                  {canEdit && <th>Acciones</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredCargas.map((carga) => (
+                  <tr key={carga.id} className="animate-fade-in">
+                    <td className="font-mono text-sm">{formatDate(carga.fecha)}</td>
+                    <td>
+                      <span className="font-mono bg-secondary px-2 py-1 rounded text-sm">
+                        {carga.numeroGuia || '-'}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={cn(
+                        "px-2 py-0.5 rounded-full text-[10px] uppercase font-bold",
+                        "bg-primary/10 text-primary"
+                      )}>
+                        {carga.tipoCombustible || '-'}
+                      </span>
+                    </td>
+                    <td>{carga.estanque || '-'}</td>
+                    <td className="text-muted-foreground">{carga.proveedor || '-'}</td>
+                    <td className="text-xs">{carga.patenteCamion || '-'}</td>
+                    <td className="text-xs">{carga.conductor || '-'}</td>
+                    <td>
+                      <span className="font-mono font-medium text-success">
+                        +{(carga.litros || 0).toLocaleString()} L
+                      </span>
+                    </td>
+                    <td className="text-sm">{carga.responsable || '-'}</td>
+                    <td className="text-sm text-muted-foreground">
+                      {carga.observaciones || '-'}
+                    </td>
+                    {canEdit && (
+                      <td>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => handleEdit(e, carga)}
+                            title="Editar carga"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => handleDelete(e, carga)}
+                            className="hover:bg-destructive/10"
+                            title="Eliminar carga"
+                          >
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Form Dialog */}
+      <CargaForm
+        open={isFormOpen}
+        onClose={() => {
+          setIsFormOpen(false);
+          setEditingCarga(null);
+        }}
+        onSubmit={handleSubmit}
+        estanques={estanques}
+        initialData={editingCarga}
+        isLoading={createMutation.isPending || updateMutation.isPending}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-destructive" />
+              Confirmar Eliminación de Carga
+            </DialogTitle>
+            <DialogDescription>
+              Esta acción eliminará la carga y ajustará el stock del estanque restando los litros cargados.
+            </DialogDescription>
+          </DialogHeader>
+          {cargaToDelete && (
+            <div className="grid gap-3 py-4 bg-secondary/30 p-4 rounded-lg">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <span className="text-muted-foreground">Fecha:</span>
+                <span className="font-medium">{cargaToDelete.fecha ? new Date(cargaToDelete.fecha).toLocaleDateString('es-CL') : '-'}</span>
+
+                <span className="text-muted-foreground">Estanque:</span>
+                <span className="font-medium">{cargaToDelete.estanque}</span>
+
+                <span className="text-muted-foreground">Litros:</span>
+                <span className="font-medium text-destructive">-{cargaToDelete.litros?.toLocaleString()} L</span>
+
+                <span className="text-muted-foreground">Proveedor:</span>
+                <span className="font-medium">{cargaToDelete.proveedor}</span>
+
+                <span className="text-muted-foreground">N° Guía:</span>
+                <span className="font-medium">{cargaToDelete.numeroGuia || '-'}</span>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsDeleteDialogOpen(false);
+                setCargaToDelete(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Eliminando...
+                </>
+              ) : (
+                'Eliminar Carga'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+
+  );
+}

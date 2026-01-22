@@ -1,0 +1,305 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Industrial dark theme - Fuel Management CRM */
+    --background: 220 20% 10%;
+    --foreground: 210 20% 95%;
+
+    --card: 220 18% 13%;
+    --card-foreground: 210 20% 95%;
+
+    --popover: 220 18% 13%;
+    --popover-foreground: 210 20% 95%;
+
+    /* Primary - Deep Industrial Blue */
+    --primary: 215 80% 55%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary - Steel Gray */
+    --secondary: 220 15% 20%;
+    --secondary-foreground: 210 20% 90%;
+
+    /* Muted - Subtle gray */
+    --muted: 220 15% 18%;
+    --muted-foreground: 215 15% 55%;
+
+    /* Accent - Fuel Orange/Amber */
+    --accent: 35 95% 55%;
+    --accent-foreground: 220 20% 10%;
+
+    /* Status Colors */
+    --success: 145 70% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 45 95% 50%;
+    --warning-foreground: 220 20% 10%;
+
+    --destructive: 0 75% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --critical: 0 85% 45%;
+    --critical-foreground: 0 0% 100%;
+
+    --border: 220 15% 22%;
+    --input: 220 15% 22%;
+    --ring: 215 80% 55%;
+
+    --radius: 0.625rem;
+
+    /* Custom gradients */
+    --gradient-fuel: linear-gradient(135deg, hsl(35 95% 55%) 0%, hsl(25 90% 45%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(220 18% 15%) 0%, hsl(220 18% 12%) 100%);
+    --gradient-header: linear-gradient(90deg, hsl(220 20% 10%) 0%, hsl(220 18% 14%) 100%);
+
+    /* Shadows */
+    --shadow-card: 0 4px 24px -4px hsla(0 0% 0% / 0.4);
+    --shadow-glow-accent: 0 0 20px -4px hsl(35 95% 55% / 0.3);
+    --shadow-glow-success: 0 0 20px -4px hsl(145 70% 45% / 0.3);
+    --shadow-glow-warning: 0 0 20px -4px hsl(45 95% 50% / 0.3);
+    --shadow-glow-critical: 0 0 20px -4px hsl(0 85% 45% / 0.3);
+
+    --sidebar-background: 220 20% 8%;
+    --sidebar-foreground: 210 20% 90%;
+    --sidebar-primary: 215 80% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 15% 15%;
+    --sidebar-accent-foreground: 210 20% 95%;
+    --sidebar-border: 220 15% 18%;
+    --sidebar-ring: 215 80% 55%;
+  }
+
+  /* Light theme - Clean and Professional */
+  :root.light {
+    --background: 0 0% 98%;
+    --foreground: 220 20% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 20% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 20% 15%;
+
+    /* Primary - Vibrant Blue */
+    --primary: 215 85% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary - Light Gray */
+    --secondary: 210 15% 92%;
+    --secondary-foreground: 220 20% 20%;
+
+    /* Muted - Soft gray */
+    --muted: 210 15% 95%;
+    --muted-foreground: 215 15% 45%;
+
+    /* Accent - Warm Orange */
+    --accent: 35 90% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    /* Status Colors */
+    --success: 145 65% 42%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 45 90% 50%;
+    --warning-foreground: 220 20% 15%;
+
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --critical: 0 80% 45%;
+    --critical-foreground: 0 0% 100%;
+
+    --border: 220 15% 88%;
+    --input: 220 15% 88%;
+    --ring: 215 85% 50%;
+
+    --radius: 0.625rem;
+
+    /* Custom gradients - Light mode */
+    --gradient-fuel: linear-gradient(135deg, hsl(35 90% 55%) 0%, hsl(25 85% 50%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(210 15% 98%) 100%);
+    --gradient-header: linear-gradient(90deg, hsl(0 0% 98%) 0%, hsl(210 15% 96%) 100%);
+
+    /* Shadows - Light mode */
+    --shadow-card: 0 2px 12px -2px hsla(220 15% 30% / 0.1);
+    --shadow-glow-accent: 0 0 16px -4px hsl(35 90% 55% / 0.2);
+    --shadow-glow-success: 0 0 16px -4px hsl(145 65% 42% / 0.2);
+    --shadow-glow-warning: 0 0 16px -4px hsl(45 90% 50% / 0.2);
+    --shadow-glow-critical: 0 0 16px -4px hsl(0 80% 45% / 0.2);
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 220 20% 20%;
+    --sidebar-primary: 215 85% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 15% 95%;
+    --sidebar-accent-foreground: 220 20% 20%;
+    --sidebar-border: 220 15% 88%;
+    --sidebar-ring: 215 85% 50%;
+  }
+
+  /* Screen border for Day Mode */
+  :root.light body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    border: 4px solid transparent;
+    border-image: linear-gradient(135deg, hsl(215 85% 50%) 0%, hsl(215 85% 30%) 100%) 1;
+    pointer-events: none;
+    z-index: 9999;
+    animation: border-fade 1s ease-out;
+  }
+
+  @keyframes border-fade {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+}
+
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer components {
+
+  /* Status indicators */
+  .status-indicator {
+    @apply w-3 h-3 rounded-full relative;
+  }
+
+  .status-indicator::after {
+    content: '';
+    @apply absolute inset-0 rounded-full animate-ping opacity-75;
+  }
+
+  .status-operativo {
+    @apply bg-success;
+    box-shadow: var(--shadow-glow-success);
+  }
+
+  .status-operativo::after {
+    @apply bg-success;
+  }
+
+  .status-bajo {
+    @apply bg-warning;
+    box-shadow: var(--shadow-glow-warning);
+  }
+
+  .status-bajo::after {
+    @apply bg-warning;
+  }
+
+  .status-critico {
+    @apply bg-critical;
+    box-shadow: var(--shadow-glow-critical);
+  }
+
+  .status-critico::after {
+    @apply bg-critical;
+  }
+
+  /* Cards with glow effects */
+  .card-fuel {
+    background: var(--gradient-card);
+    box-shadow: var(--shadow-card);
+  }
+
+  .card-fuel:hover {
+    box-shadow: var(--shadow-glow-accent);
+  }
+
+  /* KPI value styling */
+  .kpi-value {
+    @apply text-4xl font-bold tracking-tight;
+    background: var(--gradient-fuel);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Data table styling */
+  .data-table {
+    @apply w-full text-sm;
+  }
+
+  .data-table th {
+    @apply text-left text-muted-foreground font-medium uppercase text-xs tracking-wider py-3 px-4 border-b border-border;
+  }
+
+  .data-table td {
+    @apply py-3 px-4 border-b border-border/50;
+  }
+
+  .data-table tr:hover td {
+    @apply bg-secondary/30;
+  }
+
+  /* Navigation styling */
+  .nav-item {
+    @apply flex items-center gap-2.5 px-3 py-2 rounded-lg text-muted-foreground transition-all duration-200 text-sm;
+  }
+
+  .nav-item:hover {
+    @apply bg-secondary text-foreground;
+  }
+
+  .nav-item.active {
+    @apply bg-primary/10 text-primary border-l-2 border-primary font-medium;
+  }
+
+  /* Progress bar for tank levels */
+  .tank-level {
+    @apply h-2 rounded-full overflow-hidden bg-secondary;
+  }
+
+  .tank-level-fill {
+    @apply h-full rounded-full transition-all duration-500;
+  }
+
+  /* Alert badge */
+  .alert-badge {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium;
+  }
+
+  .alert-badge-success {
+    @apply bg-success/20 text-success;
+  }
+
+  .alert-badge-warning {
+    @apply bg-warning/20 text-warning;
+  }
+
+  .alert-badge-critical {
+    @apply bg-critical/20 text-critical;
+  }
+}
+
+@layer utilities {
+  .text-gradient-fuel {
+    background: var(--gradient-fuel);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
