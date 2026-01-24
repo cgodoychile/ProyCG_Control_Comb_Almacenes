@@ -67,7 +67,8 @@ export const SyncManager: React.FC = () => {
     useEffect(() => {
         const handleOnline = () => {
             setIsOnline(true);
-            toast.success('Conexión restaurada. Sincronizando...', {
+            toast.success('Conexión restaurada', {
+                description: 'El sistema intentará sincronizar los datos pendientes.',
                 icon: <Wifi className="w-4 h-4 text-green-500" />,
             });
             syncQueue();
@@ -90,7 +91,7 @@ export const SyncManager: React.FC = () => {
             if (navigator.onLine && queue.length > 0 && !isSyncing) {
                 syncQueue();
             }
-        }, 10000);
+        }, 5000);
 
         return () => {
             window.removeEventListener('online', handleOnline);
@@ -102,17 +103,23 @@ export const SyncManager: React.FC = () => {
     if (pendingCount === 0 && isOnline) return null;
 
     return (
-        <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
+        <div className="fixed bottom-4 right-4 z-[100] flex flex-col items-end gap-2">
             {!isOnline && (
-                <div className="bg-yellow-500 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 text-sm font-medium animate-pulse">
-                    <WifiOff className="w-4 h-4" />
-                    Modo Offline
+                <div className="bg-destructive text-white px-4 py-2 rounded-lg shadow-2xl flex items-center gap-2 text-sm font-bold animate-bounce ring-4 ring-destructive/20">
+                    <WifiOff className="w-5 h-5" />
+                    MODO OFFLINE - Cambios guardados localmente
+                </div>
+            )}
+            {isOnline && pendingCount === 0 && (
+                <div className="bg-success/90 text-white px-3 py-1.5 rounded-full shadow-lg flex items-center gap-2 text-xs font-medium animate-fade-in">
+                    <Wifi className="w-3.5 h-3.5" />
+                    Sincronizado
                 </div>
             )}
             {pendingCount > 0 && (
-                <div className="bg-primary text-primary-foreground px-4 py-2 rounded-full shadow-lg flex items-center gap-2 text-sm font-medium">
+                <div className="bg-primary text-primary-foreground px-4 py-2 rounded-lg shadow-xl flex items-center gap-2 text-sm font-bold ring-4 ring-primary/20">
                     <RefreshCcw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-                    {pendingCount} pendiente{pendingCount !== 1 ? 's' : ''}
+                    {pendingCount} registro{pendingCount !== 1 ? 's' : ''} pendiente{pendingCount !== 1 ? 's' : ''}
                 </div>
             )}
         </div>

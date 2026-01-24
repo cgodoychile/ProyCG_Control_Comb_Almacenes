@@ -229,7 +229,7 @@ function repairAllSheetStructures() {
   try {
     // 1. Reparar PRODUCTOS_ALMACEN
     const pSheet = getSheet(SHEET_NAMES.PRODUCTOS_ALMACEN);
-    const pHeaders = ['ID_Producto', 'ID_Almacen', 'Nombre', 'Categoria', 'Cantidad', 'Unidad', 'Stock_Minimo', 'Valor_Unitario', 'Fecha_Ingreso', 'Proveedor_Principal', 'Estado', 'Retornable', 'En Uso', 'Es Activo'];
+    const pHeaders = ['ID_Producto', 'ID_Almacen', 'Nombre', 'Categoria', 'Cantidad', 'Unidad', 'Stock_Minimo', 'Valor_Unitario', 'Fecha_Ingreso', 'Proveedor_Principal', 'Estado', 'Retornable', 'En Uso', 'Es Activo', 'Descripcion'];
     pSheet.getRange(1, 1, 1, pHeaders.length).setValues([pHeaders]);
     Logger.log('✅ Cabeceras de PRODUCTOS_ALMACEN reparadas');
     

@@ -15,6 +15,8 @@ import { BarcodeScanner } from '@/components/shared/BarcodeScanner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { AlertTriangle } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 
 export function ActivosModule() {
   const { canEdit } = useAuth();
@@ -25,6 +27,7 @@ export function ActivosModule() {
   const [printingActivo, setPrintingActivo] = useState<any>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [activoToDelete, setActivoToDelete] = useState<any>(null);
+  const [deleteFromWarehouse, setDeleteFromWarehouse] = useState(false);
   const labelRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -86,15 +89,45 @@ export function ActivosModule() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
+      // 1. Delete original asset
       const response = await activosApi.delete(id);
       if (!response.success) {
         throw new Error(response.message || "Error al eliminar el activo");
       }
+
+      // 2. Delete from warehouse if requested
+      if (deleteFromWarehouse) {
+        try {
+          // Fetch all products to find the one linked to this asset
+          const productsResponse = await productosAlmacenApi.getAll();
+          const products = productsResponse.data || [];
+
+          // The product description usually looks like "Activo: [AssetID] - [Category]"
+          // Searching for a product that mentions this asset ID in its description
+          const linkedProduct = products.find((p: any) =>
+            p.descripcion?.includes(`Activo: ${id}`) ||
+            p.nombre === activoToDelete?.nombre
+          );
+
+          if (linkedProduct) {
+            console.log('🗑️ Deleting linked warehouse product:', linkedProduct.id);
+            await productosAlmacenApi.delete(linkedProduct.id);
+            toast({ title: "📦 Producto eliminado", description: `Se eliminó coincidencia en bodega: ${linkedProduct.nombre}` });
+          }
+        } catch (err) {
+          console.error('Error deleting linked product:', err);
+          toast({ variant: "destructive", title: "⚠️ Parcial", description: "Activo eliminado, pero no se pudo borrar de bodega." });
+        }
+      }
+
       return response;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['activos'] });
+      queryClient.invalidateQueries({ queryKey: ['productos'] });
+      queryClient.invalidateQueries({ queryKey: ['almacenes'] });
       toast({ title: "✅ Activo eliminado", description: "El activo ha sido eliminado correctamente." });
+      setDeleteFromWarehouse(false); // Reset state
     },
     onError: (error: any) => {
       toast({ variant: "destructive", title: "❌ Error", description: error.message || "No se pudo eliminar el activo." });
@@ -419,12 +452,27 @@ export function ActivosModule() {
               </div>
             </div>
           )}
+          <div className="flex items-center space-x-2 py-2">
+            <Checkbox
+              id="deleteFromWarehouse"
+              checked={deleteFromWarehouse}
+              onCheckedChange={(checked) => setDeleteFromWarehouse(checked as boolean)}
+            />
+            <Label
+              htmlFor="deleteFromWarehouse"
+              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+            >
+              Eliminar también de bodega (descontar del inventario)
+            </Label>
+          </div>
+
           <DialogFooter>
             <Button
               variant="outline"
               onClick={() => {
                 setIsDeleteDialogOpen(false);
                 setActivoToDelete(null);
+                setDeleteFromWarehouse(false);
               }}
             >
               Cancelar

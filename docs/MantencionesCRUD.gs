@@ -97,10 +97,41 @@ function createMantencion(data) {
     // Audit Log
     registrarAccion('Mantenciones', 'crear', `Nueva mantención registrada: ${data.tipoMantencion} para vehículo ${data.vehiculo}`, 'success', data.responsable);
     
+    // Sync with Vehiculos sheet
+    if (data.vehiculo && data.kmActual) {
+      updateVehiculoMileage(data.vehiculo, data.kmActual, data.fechaIngreso);
+    }
+
     return createResponse(true, { id, ...data }, "Mantención registrada exitosamente");
   } catch (error) {
     console.error('Error en createMantencion:', error.toString());
     return createResponse(false, null, error.toString());
+  }
+}
+
+/**
+ * Helper to update Vehicle mileage after maintenance
+ */
+function updateVehiculoMileage(patente, km, fecha) {
+  try {
+    const vSheet = getSheet(SHEET_NAMES.VEHICULOS);
+    const vData = vSheet.getDataRange().getValues();
+    const patId = patente.toString().trim().toUpperCase();
+    
+    for (let i = 1; i < vData.length; i++) {
+      if (vData[i][COLUMNS.VEHICULOS.PATENTE].toString().trim().toUpperCase() === patId) {
+        const currentKm = Number(vData[i][COLUMNS.VEHICULOS.KILOMETRAJE]) || 0;
+        // Only update if reported KM is higher
+        if (Number(km) > currentKm) {
+          vSheet.getRange(i + 1, COLUMNS.VEHICULOS.KILOMETRAJE + 1).setValue(km);
+        }
+        // Update last maintenance date
+        vSheet.getRange(i + 1, COLUMNS.VEHICULOS.ULTIMA_MANTENCION + 1).setValue(fecha);
+        break;
+      }
+    }
+  } catch (e) {
+    console.error("Error updating vehicle mileage:", e.toString());
   }
 }
 
@@ -139,6 +170,15 @@ function updateMantencion(id, data) {
         range.setValues([newValues]);
         // Audit Log
         registrarAccion('Mantenciones', 'actualizar', `Mantención actualizada: ${id} (Vehículo: ${data.vehiculo || currentValues[COLUMNS.MANTENCIONES.VEHICULO]})`, 'info', data.responsable);
+
+        // Sync with Vehiculos if KM or Vehicle changed
+        const vehId = data.vehiculo || currentValues[COLUMNS.MANTENCIONES.VEHICULO];
+        const kmVal = data.kmActual !== undefined ? data.kmActual : currentValues[COLUMNS.MANTENCIONES.KM_ACTUAL];
+        const fechaVal = data.fechaIngreso || currentValues[COLUMNS.MANTENCIONES.FECHA_INGRESO];
+        
+        if (vehId && kmVal) {
+          updateVehiculoMileage(vehId, kmVal, fechaVal);
+        }
 
         return createResponse(true, { id, ...data }, "Mantención actualizada");
      }

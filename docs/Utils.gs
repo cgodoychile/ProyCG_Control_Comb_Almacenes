@@ -132,9 +132,22 @@ function checkBoolean(val) {
  * @param {string} modulo - Módulo origen
  * @param {string} accion - Acción realizada
  */
+/**
+ * Crea una alerta en el sistema y la registra en la hoja de Auditoría/Alertas
+ * @param {string} tipo - success, info, warning, critical
+ * @param {string} mensaje - Descripción de la alerta
+ * @param {string} modulo - Módulo origen
+ * @param {string} accion - Acción realizada
+ */
 function createAlerta(tipo, mensaje, modulo, accion) {
   try {
     Logger.log(`ALERTA: [${tipo}] ${modulo} - ${mensaje}`);
+    // Vinculamos con registrarAccion para persistencia en Google Sheets
+    if (typeof registrarAccion === 'function') {
+      registrarAccion(modulo, accion, mensaje, tipo);
+    } else {
+      Logger.log('ADVERTENCIA: registrarAccion no está disponible. No se pudo persistir la alerta.');
+    }
   } catch (e) {
     Logger.log('Error creando alerta: ' + e.toString());
   }

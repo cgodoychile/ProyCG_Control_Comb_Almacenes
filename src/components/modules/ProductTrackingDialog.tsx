@@ -67,7 +67,7 @@ export function ProductTrackingDialog({ isOpen, onClose, producto, movimientos, 
             const cantidad = Number(m.cantidad) || 0;
 
             if (!assignments[responsable]) {
-                assignments[responsable] = { cantidad: 0, ultimaFecha: m.fecha, earliestDueDate: '' };
+                assignments[responsable] = { responsable, cantidad: 0, ultimaFecha: m.fecha, earliestDueDate: '' };
             }
 
             if (new Date(m.fecha) > new Date(assignments[responsable].ultimaFecha)) {
@@ -144,7 +144,7 @@ export function ProductTrackingDialog({ isOpen, onClose, producto, movimientos, 
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+            <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-hidden flex flex-col p-4 sm:p-6">
                 <DialogHeader>
                     <div className="flex items-center gap-4 border-b pb-4">
                         <div className="h-12 w-12 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-700">
@@ -214,10 +214,10 @@ export function ProductTrackingDialog({ isOpen, onClose, producto, movimientos, 
                                                 <Button
                                                     size="sm"
                                                     variant="outline"
-                                                    className="h-6 text-[10px] px-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                                                    className="h-10 text-xs px-4 border-indigo-200 text-indigo-700 hover:bg-indigo-50 font-bold"
                                                     onClick={() => onReturn && onReturn(assignment.responsable, assignment.cantidad)}
                                                 >
-                                                    <ArrowDownLeft className="h-3 w-3 mr-1" />
+                                                    <ArrowDownLeft className="h-4 w-4 mr-1" />
                                                     Devolver
                                                 </Button>
                                             </div>

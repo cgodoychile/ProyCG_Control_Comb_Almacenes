@@ -203,7 +203,7 @@ export function VehiculosModule() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {vehiculosData.map((vehiculo) => (
+                                    {[...vehiculosData].reverse().map((vehiculo) => (
                                         <tr key={vehiculo.id}>
                                             {/* ... columns ... */}
                                             <td>

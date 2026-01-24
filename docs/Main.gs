@@ -147,10 +147,4 @@ function doPost(e) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-// AUDITORIA
-function handleAuditoriaGet(action) {
-  switch (action.toLowerCase()) {
-    case 'getall': return getAllAuditoria();
-    default: return createErrorResponse('Acción no válida', 400);
-  }
-}
+// End of file

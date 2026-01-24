@@ -96,6 +96,17 @@ export function AuditoriaModule() {
         currentPage * itemsPerPage
     );
 
+    const getActionLabel = (action: string) => {
+        switch (action.toLowerCase()) {
+            case 'crear': return 'Creación';
+            case 'actualizar': case 'editar': return 'Actualización';
+            case 'eliminar': return 'Eliminación';
+            case 'ver': return 'Visualización';
+            case 'movimiento': return 'Movimiento';
+            default: return action.charAt(0).toUpperCase() + action.slice(1);
+        }
+    };
+
     const getActionIcon = (action: string) => {
         switch (action) {
             case 'crear': return <Plus className="w-4 h-4" />;
@@ -113,6 +124,16 @@ export function AuditoriaModule() {
             case 'eliminar': return 'text-destructive';
             case 'ver': return 'text-blue-500';
             default: return 'text-muted-foreground';
+        }
+    };
+
+    const getTypeLabel = (type: string) => {
+        switch (type?.toLowerCase()) {
+            case 'critical': return 'Crítico';
+            case 'warning': return 'Aviso';
+            case 'success': return 'Éxito';
+            case 'info': return 'Info';
+            default: return type ? type.toUpperCase() : 'Info';
         }
     };
 
@@ -153,11 +174,17 @@ export function AuditoriaModule() {
                         Registro completo de acciones y cambios en el sistema
                     </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row items-center gap-2">
+                    <DateRangeFilter
+                        onFilterChange={(desde, hasta) => {
+                            setFechaDesde(desde);
+                            setFechaHasta(hasta);
+                        }}
+                    />
                     <Button
                         size="sm"
                         variant="outline"
-                        className="gap-2 border-accent text-accent hover:bg-accent/10"
+                        className="gap-2 border-accent text-accent hover:bg-accent/10 h-10"
                         onClick={() => {
                             // TODO: Implement export functionality
                             console.log('Exportar auditoría');
@@ -199,13 +226,13 @@ export function AuditoriaModule() {
             </div>
 
             {/* Filters */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* Search */}
                 <div className="relative">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
                         placeholder="Buscar en auditoría..."
-                        className="pl-8"
+                        className="pl-8 h-10"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
@@ -213,7 +240,7 @@ export function AuditoriaModule() {
 
                 {/* Module Filter */}
                 <Select value={selectedModule} onValueChange={setSelectedModule}>
-                    <SelectTrigger>
+                    <SelectTrigger className="h-10">
                         <SelectValue placeholder="Todos los módulos" />
                     </SelectTrigger>
                     <SelectContent>
@@ -230,7 +257,7 @@ export function AuditoriaModule() {
 
                 {/* Action Filter */}
                 <Select value={selectedAction} onValueChange={setSelectedAction}>
-                    <SelectTrigger>
+                    <SelectTrigger className="h-10">
                         <SelectValue placeholder="Todas las acciones" />
                     </SelectTrigger>
                     <SelectContent>
@@ -242,13 +269,6 @@ export function AuditoriaModule() {
                     </SelectContent>
                 </Select>
 
-                {/* Date Range */}
-                <DateRangeFilter
-                    onFilterChange={(desde, hasta) => {
-                        setFechaDesde(desde);
-                        setFechaHasta(hasta);
-                    }}
-                />
             </div>
 
             {/* Audit Table */}
@@ -287,7 +307,7 @@ export function AuditoriaModule() {
                                                 getActionColor(log.accionRealizada || '')
                                             )}>
                                                 {getActionIcon(log.accionRealizada || '')}
-                                                <span className="capitalize">{log.accionRealizada || 'N/A'}</span>
+                                                <span className="capitalize">{getActionLabel(log.accionRealizada || '')}</span>
                                             </div>
                                         </td>
                                         <td>
@@ -312,7 +332,7 @@ export function AuditoriaModule() {
                                                 log.tipo === 'success' && "bg-success/10 text-success",
                                                 log.tipo === 'info' && "bg-blue-500/10 text-blue-500"
                                             )}>
-                                                {log.tipo || 'info'}
+                                                {getTypeLabel(log.tipo || '')}
                                             </span>
                                         </td>
                                     </tr>
