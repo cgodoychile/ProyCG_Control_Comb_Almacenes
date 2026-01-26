@@ -425,7 +425,33 @@ export function AuditoriaModule() {
                                             </span>
                                         </td>
                                         <td className="text-foreground">
-                                            {log.mensaje || 'Sin descripción'}
+                                            {(() => {
+                                                const msg = log.mensaje || '';
+                                                let jsonToParse = msg;
+                                                let tail = '';
+
+                                                if (msg.includes(' | Justificación:')) {
+                                                    const parts = msg.split(' | Justificación:');
+                                                    jsonToParse = parts[0];
+                                                    tail = ` | Justificación: ${parts[1]}`;
+                                                }
+
+                                                if (jsonToParse.trim().startsWith('{')) {
+                                                    try {
+                                                        const parsed = JSON.parse(jsonToParse);
+                                                        if (parsed.name && parsed.entity) {
+                                                            const entityMap = { 'activos': 'Activo', 'vehiculos': 'Vehículo', 'consumos': 'Consumo', 'estanques': 'Estanque', 'almacenes': 'Bodega' };
+                                                            const friendlyEntity = (entityMap as any)[parsed.entity.toLowerCase()] || parsed.entity;
+                                                            return <>
+                                                                <span className="font-semibold text-accent">Solicitud para eliminar {friendlyEntity}:</span> {parsed.name}
+                                                                {parsed.justification && <span className="text-muted-foreground ml-1">- Motivo: {parsed.justification}</span>}
+                                                                {tail && <span className="text-xs italic text-muted-foreground block mt-1">{tail.replace(' | ', '')}</span>}
+                                                            </>;
+                                                        }
+                                                    } catch (e) { /* fallback to raw */ }
+                                                }
+                                                return msg;
+                                            })()}
                                         </td>
                                         <td className="text-muted-foreground">
                                             <div className="flex items-center gap-2">

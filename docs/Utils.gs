@@ -44,11 +44,15 @@ function getSheet(sheetName) {
 
 function formatDate(date) {
   if (!date) return '';
-  const d = new Date(date);
+  let d = new Date(date);
   if (isNaN(d.getTime())) return String(date);
+  
+  // Offset correction: subtract 5 hours to align server with Chile
+  const adjustedTime = d.getTime() - (5 * 60 * 60 * 1000);
+  const adjustedDate = new Date(adjustedTime);
+
   try {
-    // Explicitly using GMT-3 for Chile Continental
-    return Utilities.formatDate(d, "GMT-3", "dd-MM-yyyy");
+    return Utilities.formatDate(adjustedDate, "GMT", "dd-MM-yyyy");
   } catch (e) {
     return String(date);
   }
@@ -56,11 +60,15 @@ function formatDate(date) {
 
 function formatDateTime(date) {
   if (!date) return '';
-  const d = new Date(date);
+  let d = new Date(date);
   if (isNaN(d.getTime())) return String(date);
+  
+  // Offset correction: subtract 5 hours to align server with Chile
+  const adjustedTime = d.getTime() - (5 * 60 * 60 * 1000);
+  const adjustedDate = new Date(adjustedTime);
+
   try {
-    // Explicitly using GMT-3 for Chile Continental to ensure synchronization with user device
-    return Utilities.formatDate(d, "GMT-3", "dd-MM-yyyy HH:mm");
+    return Utilities.formatDate(adjustedDate, "GMT", "dd-MM-yyyy, HH:mm");
   } catch (e) {
     return String(date);
   }
@@ -192,6 +200,20 @@ function registrarAccion(modulo, accion, mensaje, tipo, usuario, justificacion) 
     setVal('ACCION', COLUMNS.AUDITORIA.ACCION, accion);
     
     let fullMsg = mensaje;
+    
+    // Auto-translate JSON to Human Readable
+    if (typeof mensaje === 'string' && mensaje.trim().startsWith('{')) {
+      try {
+        const metadata = JSON.parse(mensaje);
+        if (metadata.name && metadata.entity) {
+           const entityMap = { 'activos': 'Activo', 'vehiculos': 'Vehículo', 'consumos': 'Consumo', 'estanques': 'Estanque', 'almacenes': 'Bodega' };
+           const friendlyEntity = entityMap[metadata.entity.toLowerCase()] || metadata.entity;
+           fullMsg = `Solicitud de eliminación: ${friendlyEntity} - ${metadata.name}`;
+           if (metadata.justification) fullMsg += ` (Motivo: ${metadata.justification})`;
+        }
+      } catch (e) { /* keep original if not valid JSON */ }
+    }
+
     if (justificacion) fullMsg += ` | Justificación: ${justificacion}`;
     setVal('MENSAJE', COLUMNS.AUDITORIA.MENSAJE, fullMsg);
     setVal('TIPO', COLUMNS.AUDITORIA.TIPO, tipo || 'info');

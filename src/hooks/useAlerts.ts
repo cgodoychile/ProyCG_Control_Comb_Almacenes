@@ -85,14 +85,28 @@ export function useAlerts() {
             let metadata = null;
 
             // Try to parse JSON message for special actions
-            if (mensaje && mensaje.startsWith('{')) {
-                try {
-                    metadata = JSON.parse(mensaje);
-                    if (metadata.name) {
-                        mensaje = `Solicitud para eliminar: ${metadata.name}${metadata.justification ? ` - Motivo: ${metadata.justification}` : ''}`;
+            if (mensaje) {
+                let jsonToParse = mensaje;
+                // If message has a tail (like " | Justificación: ..."), strip it for JSON parsing
+                if (mensaje.includes(' | Justificación:')) {
+                    jsonToParse = mensaje.split(' | Justificación:')[0];
+                }
+
+                if (jsonToParse.trim().startsWith('{')) {
+                    try {
+                        const parsed = JSON.parse(jsonToParse);
+                        metadata = parsed;
+                        if (parsed.name) {
+                            const entityMap: any = { 'activos': 'Activo', 'vehiculos': 'Vehículo', 'consumos': 'Consumo', 'estanques': 'Estanque', 'almacenes': 'Bodega' };
+                            const friendlyEntity = entityMap[parsed.entity?.toLowerCase()] || parsed.entity || '';
+                            mensaje = `Solicitud para eliminar ${friendlyEntity}: ${parsed.name}${parsed.justification ? ` - Motivo: ${parsed.justification}` : ''}`;
+                        } else if (parsed.mensaje) {
+                            mensaje = parsed.mensaje;
+                        }
+                    } catch (e) {
+                        console.warn('Individual alert parsing error:', e);
+                        // Fallback to original message if JSON is invalid
                     }
-                } catch (e) {
-                    // Not valid JSON or different format, keep original
                 }
             }
 
