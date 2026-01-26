@@ -87,7 +87,12 @@ function getConsumoById(id) {
 function createConsumo(data) {
   try {
     const sheet = getSheet(SHEET_NAMES.CONSUMOS);
-    const id = new Date().getTime().toString(); // Simple ID generation
+    
+    // Idempotency check
+    const duplicateResponse = checkIdempotency(sheet, data.clientRequestId, COLUMNS.CONSUMOS.ID);
+    if (duplicateResponse) return duplicateResponse;
+
+    const id = data.clientRequestId || generateId('CON');
     
     const newRow = Array(13).fill('');
     newRow[COLUMNS.CONSUMOS.ID] = id;

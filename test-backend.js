@@ -2,7 +2,7 @@
 // Ejecuta este código en la consola del navegador (F12 → Console)
 
 const testBackend = async () => {
-    const url = 'https://script.google.com/macros/s/AKfycbzx_Z99DgJXFZIbD-dZ_7WBtBWdEM7DXQX2DTTZhPwA6dDnhilHVqHNTkQNUh4p-RTAKA/exec?entity=consumos&action=getAll';
+    const url = 'https://script.google.com/macros/s/AKfycbyoDC3b5-JPnokadEBPGTSg8dI4tv8tEZRr2GzZOBHlH3izvh_o7_TmgrNmOd9vQ1-hCw/exec?entity=consumos&action=getAll';
 
     console.log('🔍 Probando conexión con backend...');
     console.log('URL:', url);

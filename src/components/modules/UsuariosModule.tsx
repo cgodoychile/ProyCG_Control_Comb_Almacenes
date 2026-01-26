@@ -1,18 +1,25 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { usuariosApi } from '@/lib/apiService';
+import { usuariosApi, auditoriaApi } from '@/lib/apiService';
+import { useAuth } from '@/context/AuthContext';
+import { useApi } from '@/hooks/useApi';
 import { UsuarioForm } from '@/components/forms/UsuarioForm';
 import { Button } from '@/components/ui/button';
 import { Plus, Edit, Trash2, Shield, User } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Loader2 } from 'lucide-react';
+import { ConfirmDeleteWithJustificationDialog } from '@/components/shared/ConfirmDeleteWithJustificationDialog';
 
 export function UsuariosModule() {
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingUsuario, setEditingUsuario] = useState<any>(null);
+    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+    const [usuarioToDelete, setUsuarioToDelete] = useState<any>(null);
     const { toast } = useToast();
     const queryClient = useQueryClient();
+    const { isAdmin, user } = useAuth();
+    const { execute, loading: isActionLoading } = useApi();
 
     // Fetch Data
     const { data: usuariosResponse, isLoading } = useQuery({
@@ -49,7 +56,8 @@ export function UsuariosModule() {
     });
 
     const deleteMutation = useMutation({
-        mutationFn: usuariosApi.delete,
+        mutationFn: ({ id, justification }: { id: string, justification: string }) =>
+            usuariosApi.delete(id, { justificacion: justification }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['usuarios'] });
             toast({ title: "✅ Usuario eliminado", description: "El usuario ha sido eliminado." });
@@ -69,10 +77,41 @@ export function UsuariosModule() {
         setIsFormOpen(true);
     };
 
-    const handleDelete = async (id: string, email: string) => {
-        // Prevent deleting self? Ideally yes, but for now simple confirm.
-        if (confirm(`¿Eliminar al usuario ${email}?`)) {
-            await deleteMutation.mutateAsync(id);
+    const handleDelete = async (usuario: any) => {
+        setUsuarioToDelete(usuario);
+        setIsDeleteDialogOpen(true);
+    };
+
+    const confirmDelete = async (justification: string) => {
+        if (!usuarioToDelete) return;
+
+        if (!isAdmin) {
+            // Flow for non-admins: Send a deletion request
+            await execute(
+                auditoriaApi.create({
+                    modulo: 'Usuarios',
+                    accion: 'solicitud_eliminacion',
+                    mensaje: `Solicitud de eliminación de Usuario: ${usuarioToDelete.name || usuarioToDelete.email} (ID: ${usuarioToDelete.email})`,
+                    tipo: 'warning',
+                    usuario: user?.email || 'Usuario',
+                    justificacion: justification
+                }),
+                {
+                    successMessage: "Solicitud de eliminación enviada para aprobación del administrador.",
+                    onSuccess: () => {
+                        setIsDeleteDialogOpen(false);
+                        setUsuarioToDelete(null);
+                    }
+                }
+            );
+        } else {
+            // Flow for admins: Direct deletion
+            await deleteMutation.mutateAsync({
+                id: usuarioToDelete.id || usuarioToDelete.email,
+                justification
+            });
+            setIsDeleteDialogOpen(false);
+            setUsuarioToDelete(null);
         }
     };
 
@@ -153,7 +192,7 @@ export function UsuariosModule() {
                                                 size="sm"
                                                 variant="ghost"
                                                 className="text-destructive hover:text-destructive"
-                                                onClick={() => handleDelete(usuario.id || usuario.email, usuario.email)}
+                                                onClick={() => handleDelete(usuario)}
                                             >
                                                 <Trash2 className="w-4 h-4" />
                                             </Button>
@@ -175,6 +214,21 @@ export function UsuariosModule() {
                 onSubmit={handleSubmit}
                 initialData={editingUsuario}
                 isLoading={createMutation.isPending || updateMutation.isPending}
+            />
+
+            <ConfirmDeleteWithJustificationDialog
+                open={isDeleteDialogOpen}
+                onClose={() => {
+                    setIsDeleteDialogOpen(false);
+                    setUsuarioToDelete(null);
+                }}
+                onConfirm={confirmDelete}
+                isLoading={deleteMutation.isPending || isActionLoading}
+                title="¿Eliminar Usuario?"
+                description="Esta acción eliminará permanentemente el acceso del usuario al sistema. Se requiere una justificación."
+                itemName={usuarioToDelete?.name || usuarioToDelete?.email}
+                isAdmin={isAdmin}
+                isCritical={true}
             />
         </div>
     );

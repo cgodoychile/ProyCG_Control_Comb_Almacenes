@@ -15,7 +15,7 @@ function handleProductosPost(action, id, data) {
   switch (action.toLowerCase()) {
     case 'create': return createProducto(data);
     case 'update': return updateProducto(id, data);
-    case 'delete': return deleteProducto(id);
+    case 'delete': return deleteProducto(id, data);
     default: return createErrorResponse('Acción no válida', 400);
   }
 }
@@ -138,7 +138,14 @@ function createProducto(data) {
         const sheet = getSheet(SHEET_NAMES.PRODUCTOS_ALMACEN);
         const colMap = getProductosColMap(sheet);
         
-        if (!data.id && data.categoria) {
+        // Idempotency check
+        const idIdx = colMap.ID !== -1 ? colMap.ID : COLUMNS.PRODUCTOS_ALMACEN.ID;
+        const duplicateResponse = checkIdempotency(sheet, data.clientRequestId, idIdx);
+        if (duplicateResponse) return duplicateResponse;
+
+        if (data.clientRequestId) {
+            data.id = data.clientRequestId;
+        } else if (!data.id && data.categoria) {
             data.id = generateProductCode(data.categoria);
         } else if (!data.id) {
             data.id = 'PRD-' + new Date().getTime();
@@ -238,21 +245,21 @@ function updateProducto(id, data) {
     }
 }
 
-function deleteProducto(id) {
+function deleteProducto(id, data) {
     try {
         const sheet = getSheet(SHEET_NAMES.PRODUCTOS_ALMACEN);
         const colMap = getProductosColMap(sheet);
         const idIdx = colMap.ID !== -1 ? colMap.ID : COLUMNS.PRODUCTOS_ALMACEN.ID;
-        const data = sheet.getDataRange().getValues();
+        const sheetData = sheet.getDataRange().getValues();
         const targetId = String(id).trim();
 
-        for (let i = 1; i < data.length; i++) {
-            if (String(data[i][idIdx]).trim() === targetId) {
+        for (let i = 1; i < sheetData.length; i++) {
+            if (String(sheetData[i][idIdx]).trim() === targetId) {
                 const nombreIdx = colMap.NOMBRE !== -1 ? colMap.NOMBRE : COLUMNS.PRODUCTOS_ALMACEN.NOMBRE;
-                const nombre = data[i][nombreIdx];
+                const nombre = sheetData[i][nombreIdx];
                 sheet.deleteRow(i + 1);
                 
-                registrarAccion('Almacenes', 'eliminar', `Producto eliminado: ${nombre} (${id})`, 'warning', null);
+                registrarAccion('Almacenes', 'eliminar', `Producto eliminado: ${nombre} (${id})`, 'warning', null, data ? data.justificacion : null);
                 createAlerta('warning', `Producto eliminado: ${nombre}`, 'Almacenes', 'eliminar');
                 return createResponse(true, { message: "Producto eliminado" });
             }

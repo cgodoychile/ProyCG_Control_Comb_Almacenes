@@ -1,5 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Fuel, TrendingUp, Database, Truck, Gauge } from 'lucide-react';
+import { format } from 'date-fns';
 
 interface DashboardDetailsModalProps {
     open: boolean;
@@ -36,7 +37,7 @@ export function DashboardDetailsModal({ open, onClose, type, data }: DashboardDe
             case 'consumoDiario':
                 const consumosHoy = data.consumosData?.filter(c => {
                     const fechaStr = typeof c.fecha === 'string' ? c.fecha :
-                        (c.fecha ? new Date(c.fecha).toISOString().split('T')[0] : '');
+                        (c.fecha ? format(new Date(c.fecha), 'yyyy-MM-dd') : '');
                     return fechaStr.startsWith(data.today || '');
                 }) || [];
 
@@ -124,10 +125,10 @@ export function DashboardDetailsModal({ open, onClose, type, data }: DashboardDe
             case 'consumoMensual':
             case 'consumoMesAnterior':
                 const monthStr = type === 'consumoMensual' ? data.thisMonth :
-                    data.lastMonth?.toISOString().slice(0, 7);
+                    (data.lastMonth ? format(data.lastMonth, 'yyyy-MM') : '');
                 const consumosMes = data.consumosData?.filter(c => {
                     const fechaStr = typeof c.fecha === 'string' ? c.fecha :
-                        (c.fecha ? new Date(c.fecha).toISOString().split('T')[0] : '');
+                        (c.fecha ? format(new Date(c.fecha), 'yyyy-MM-dd') : '');
                     return fechaStr.startsWith(monthStr || '');
                 }) || [];
 

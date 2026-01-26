@@ -87,10 +87,10 @@ export function DashboardModule() {
   // Get last month's consumption
   const lastMonth = new Date();
   lastMonth.setMonth(lastMonth.getMonth() - 1);
-  const lastMonthStr = lastMonth.toISOString().slice(0, 7);
+  const lastMonthStr = format(lastMonth, 'yyyy-MM');
   const consumoMesAnterior = consumosData
     .filter(c => {
-      const fechaStr = typeof c.fecha === 'string' ? c.fecha : (c.fecha ? new Date(c.fecha).toISOString().split('T')[0] : '');
+      const fechaStr = typeof c.fecha === 'string' ? c.fecha : (c.fecha ? format(new Date(c.fecha), 'yyyy-MM-dd') : '');
       return fechaStr.startsWith(lastMonthStr);
     })
     .reduce((sum, c) => sum + (c.litrosUsados || 0), 0);

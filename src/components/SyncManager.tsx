@@ -1,127 +1,137 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { offlineStorage, QueuedRequest } from '@/lib/offlineStorage';
-import { buildApiUrl } from '@/lib/api';
-import { toast } from 'sonner';
-import { Wifi, WifiOff, RefreshCcw, CheckCircle2 } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
+import { apiFetch } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
+import { Wifi, WifiOff, Cloud, AlertCircle, RefreshCw } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
-export const SyncManager: React.FC = () => {
+export function SyncManager() {
     const [isOnline, setIsOnline] = useState(navigator.onLine);
-    const [isSyncing, setIsSyncing] = useState(false);
     const [pendingCount, setPendingCount] = useState(0);
-    const queryClient = useQueryClient();
-
-    const syncQueue = useCallback(async () => {
-        const queue = offlineStorage.getQueue();
-        if (queue.length === 0) return;
-
-        setIsSyncing(true);
-        let successCount = 0;
-        let failCount = 0;
-
-        toast.info(`Sincronizando ${queue.length} registros pendientes...`, {
-            icon: <RefreshCcw className="w-4 h-4 animate-spin" />,
-            id: 'sync-process',
-        });
-
-        for (const req of queue) {
-            try {
-                const url = buildApiUrl(req.entity, req.action, undefined, req.params);
-
-                const response = await fetch(url, {
-                    method: req.method,
-                    headers: { 'Content-Type': 'text/plain' },
-                    body: JSON.stringify(req.body),
-                });
-
-                const data = await response.json();
-                if (data.success) {
-                    offlineStorage.removeFromQueue(req.id);
-                    successCount++;
-                } else {
-                    failCount++;
-                }
-            } catch (err) {
-                console.error('Failed to sync request:', req.id, err);
-                failCount++;
-            }
-        }
-
-        setIsSyncing(false);
-        setPendingCount(offlineStorage.getQueue().length);
-
-        if (successCount > 0) {
-            toast.success(`¡Sincronización completada! (${successCount} éxito, ${failCount} fallidos)`, {
-                icon: <CheckCircle2 className="w-4 h-4 text-green-500" />,
-                id: 'sync-process',
-            });
-            // Invalidate all queries to refresh UI with synced data
-            queryClient.invalidateQueries();
-        } else if (failCount > 0) {
-            toast.error('La sincronización falló. Se reintentará más tarde.', {
-                id: 'sync-process',
-            });
-        }
-    }, [queryClient]);
+    const [isSyncing, setIsSyncing] = useState(false);
+    const { toast } = useToast();
 
     useEffect(() => {
-        const handleOnline = () => {
-            setIsOnline(true);
-            toast.success('Conexión restaurada', {
-                description: 'El sistema intentará sincronizar los datos pendientes.',
-                icon: <Wifi className="w-4 h-4 text-green-500" />,
-            });
-            syncQueue();
-        };
-
-        const handleOffline = () => {
-            setIsOnline(false);
-            toast.warning('Sin conexión a internet. Los cambios se guardarán localmente.', {
-                icon: <WifiOff className="w-4 h-4 text-yellow-500" />,
-            });
-        };
+        const handleOnline = () => setIsOnline(true);
+        const handleOffline = () => setIsOnline(false);
 
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
 
-        // Periodic check for pending items if online
+        // Initial check
+        updatePendingCount();
+
+        // Set up auto-sync interval
         const interval = setInterval(() => {
-            const queue = offlineStorage.getQueue();
-            setPendingCount(queue.length);
-            if (navigator.onLine && queue.length > 0 && !isSyncing) {
-                syncQueue();
+            if (navigator.onLine) {
+                syncData();
             }
-        }, 5000);
+        }, 30000); // Try every 30 seconds
 
         return () => {
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
             clearInterval(interval);
         };
-    }, [syncQueue, isSyncing]);
+    }, []);
 
-    if (pendingCount === 0 && isOnline) return null;
+    const updatePendingCount = () => {
+        const queue = offlineStorage.getQueue();
+        setPendingCount(queue.length);
+    };
 
-    return (
-        <div className="fixed bottom-4 right-4 z-[100] flex flex-col items-end gap-2">
-            {!isOnline && (
-                <div className="bg-destructive text-white px-4 py-2 rounded-lg shadow-2xl flex items-center gap-2 text-sm font-bold animate-bounce ring-4 ring-destructive/20">
-                    <WifiOff className="w-5 h-5" />
-                    MODO OFFLINE - Cambios guardados localmente
-                </div>
-            )}
-            {isOnline && pendingCount === 0 && (
-                <div className="bg-success/90 text-white px-3 py-1.5 rounded-full shadow-lg flex items-center gap-2 text-xs font-medium animate-fade-in">
-                    <Wifi className="w-3.5 h-3.5" />
-                    Sincronizado
-                </div>
-            )}
-            {pendingCount > 0 && (
-                <div className="bg-primary text-primary-foreground px-4 py-2 rounded-lg shadow-xl flex items-center gap-2 text-sm font-bold ring-4 ring-primary/20">
-                    <RefreshCcw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-                    {pendingCount} registro{pendingCount !== 1 ? 's' : ''} pendiente{pendingCount !== 1 ? 's' : ''}
-                </div>
-            )}
-        </div>
-    );
-};
+    const syncData = async () => {
+        const queue = offlineStorage.getQueue();
+        if (queue.length === 0 || isSyncing) return;
+
+        setIsSyncing(true);
+        console.log(`🔄 [Sync] Starting sync of ${queue.length} items`);
+
+        let successCount = 0;
+
+        // Process queue items one by one
+        for (const item of queue) {
+            try {
+                const response = await apiFetch(item.entity, item.action, {
+                    method: item.method as any,
+                    body: item.body,
+                    params: item.params,
+                    isSync: true
+                });
+
+                if (response.success) {
+                    offlineStorage.removeFromQueue(item.id);
+                    successCount++;
+                } else if (response.statusCode >= 400 && response.statusCode < 500) {
+                    // Validation or client error - won't be fixed by retrying
+                    console.warn(`⚠️ [Sync] Discarding invalid request ${item.entity}/${item.action}:`, response.message);
+                    offlineStorage.removeFromQueue(item.id);
+                    toast({
+                        variant: "destructive",
+                        title: "Registro descartado",
+                        description: `No se pudo procesar ${item.entity}: ${response.message}`
+                    });
+                }
+            } catch (error) {
+                console.error(`❌ [Sync] Failed to process ${item.entity}/${item.action}:`, error);
+            }
+        }
+
+        setIsSyncing(false);
+        updatePendingCount();
+
+        if (successCount > 0) {
+            toast({
+                title: "Sincronización completa",
+                description: `Se han procesado ${successCount} registros exitosamente.`
+            });
+        }
+    };
+
+    if (!isOnline) {
+        return (
+            <div className="fixed bottom-4 right-4 z-50 animate-bounce">
+                <Badge variant="destructive" className="flex items-center gap-2 p-2 shadow-lg">
+                    <WifiOff className="h-4 w-4" />
+                    MODO OFFLINE
+                </Badge>
+            </div>
+        );
+    }
+
+    if (pendingCount > 0) {
+        return (
+            <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
+                {isOnline && (
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        className="shadow-lg gap-2 text-[10px] font-bold h-8"
+                        onClick={syncData}
+                        disabled={isSyncing}
+                    >
+                        <RefreshCw className={cn("h-3 w-3", isSyncing && "animate-spin")} />
+                        FORZAR SINCRONIZACIÓN
+                    </Button>
+                )}
+                <Badge
+                    className={cn(
+                        "flex items-center gap-2 p-2 shadow-lg transition-colors",
+                        isOnline ? "bg-blue-600 hover:bg-blue-700" : "bg-muted text-muted-foreground"
+                    )}
+                >
+                    {isSyncing ? (
+                        <Cloud className="h-4 w-4 animate-spin" />
+                    ) : (
+                        <RefreshCw className="h-4 w-4" />
+                    )}
+                    {pendingCount} registros pendientes {!isOnline && '(Offline)'}
+                </Badge>
+            </div>
+        );
+    }
+
+    return null;
+}

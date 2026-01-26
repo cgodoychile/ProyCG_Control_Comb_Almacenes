@@ -161,6 +161,8 @@ export interface Alerta {
   fecha: string;
   leida: boolean;
   accionRealizada?: string; // editar, borrar, ingresar
+  accion?: string; // Para flujo de aprobación (ES)
+  action?: string; // Para flujo de aprobación (EN)
 }
 
 export interface Usuario {
@@ -176,7 +178,9 @@ export interface AuditoriaLog {
   fecha: string;
   usuario: string;
   modulo: string;
-  accionRealizada: string;
+  accionRealizada: string; // Internal action label
+  accion?: string;         // Support for 'accion' property in frontend calls
   mensaje: string;
   tipo: 'success' | 'warning' | 'critical' | 'info';
+  justificacion?: string;
 }

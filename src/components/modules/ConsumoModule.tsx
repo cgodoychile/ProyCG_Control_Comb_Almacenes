@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { consumosApi, estanquesApi, vehiculosApi } from '@/lib/apiService';
+import { consumosApi, estanquesApi, vehiculosApi, auditoriaApi } from '@/lib/apiService';
+import { useApi } from '@/hooks/useApi';
 import { ConsumoForm } from '@/components/forms/ConsumoForm';
 import { ExportButton } from '@/components/shared/ExportButton';
 import { DateRangeFilter } from '@/components/shared/DateRangeFilter';
@@ -16,6 +17,7 @@ import { generateConsumoReport } from '@/lib/export';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useAuth } from '@/context/AuthContext';
+import { ConfirmDeleteWithJustificationDialog } from '@/components/shared/ConfirmDeleteWithJustificationDialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -53,7 +55,8 @@ export function ConsumoModule() {
   const itemsPerPage = 50;
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { isAdmin, canEdit } = useAuth();
+  const { isAdmin, canEdit, user } = useAuth();
+  const { execute, loading: isActionLoading } = useApi();
 
   // Fetch data
   const { data: consumosResponse, isLoading: loadingConsumos } = useQuery({
@@ -82,14 +85,14 @@ export function ConsumoModule() {
 
     // Add vehicles from Vehiculos module
     vehiculos.forEach(v => {
-      if (v.patente) {
-        vehicleMap.set(v.patente, {
-          id: v.id || v.patente,
-          patente: v.patente,
+      if (v.id) {
+        vehicleMap.set(v.id, {
+          id: v.id,
+          patente: v.id,
           marca: v.marca,
           modelo: v.modelo,
           estado: v.estado || 'operativo',
-          nombre: v.nombre
+          nombre: v.id
         });
       }
     });
@@ -156,8 +159,8 @@ export function ConsumoModule() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async ({ id, devolverStock }: { id: string; devolverStock: boolean }) => {
-      return consumosApi.delete(id, { restoreStock: devolverStock });
+    mutationFn: async ({ id, devolverStock, justification }: { id: string; devolverStock: boolean; justification: string }) => {
+      return consumosApi.delete(id, { restoreStock: devolverStock, justificacion: justification });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['consumos'] });
@@ -192,10 +195,37 @@ export function ConsumoModule() {
     setDeleteTargetId(id);
   };
 
-  const confirmDelete = (devolverStock: boolean) => {
-    if (deleteTargetId) {
-      deleteMutation.mutate({ id: deleteTargetId, devolverStock });
-    }
+  const confirmDelete = async (justification: string, checkboxesState?: Record<string, boolean>) => {
+    if (!deleteTargetId) return;
+    const devolverStock = checkboxesState?.devolverStock ?? true;
+
+    // Flow for EVERYONE: Send a deletion request
+    const consumo = consumosData.find(c => c.id === deleteTargetId);
+    const consumoName = consumo ? `${consumo.vehiculo} - ${consumo.litrosUsados}L` : deleteTargetId;
+
+    await execute(
+      auditoriaApi.create({
+        modulo: 'Consumos',
+        accion: 'solicitud_eliminacion',
+        mensaje: JSON.stringify({
+          entity: 'consumos',
+          id: deleteTargetId,
+          name: consumoName,
+          restoreStock: devolverStock,
+          justification: justification
+        }),
+        tipo: 'warning',
+        usuario: user?.email || 'Usuario',
+        justificacion: justification
+      }),
+      {
+        successMessage: "Solicitud de eliminación enviada para aprobación del administrador.",
+        onSuccess: () => {
+          setDeleteTargetId(null);
+          queryClient.invalidateQueries({ queryKey: ['activity-alerts'] });
+        }
+      }
+    );
   };
 
   const handleSubmit = async (data: ConsumoFormData) => {
@@ -595,30 +625,19 @@ export function ConsumoModule() {
         initialData={editingConsumo}
         isLoading={createMutation.isPending || updateMutation.isPending}
       />
-      {/* Alert Dialog for Delete Confirmation */}
-      < AlertDialog open={!!deleteTargetId} onOpenChange={(open) => !open && setDeleteTargetId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Desea devolver los litros al estanque?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Está a punto de eliminar un registro de consumo.
-              <br /><br />
-              <strong>SÍ:</strong> Elimina el registro Y suma los litros de vuelta al stock del estanque.
-              <br />
-              <strong>NO:</strong> Solo elimina el registro (el stock no cambia).
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <Button variant="secondary" onClick={() => confirmDelete(false)}>
-              NO, Solo Eliminar
-            </Button>
-            <Button variant="destructive" onClick={() => confirmDelete(true)}>
-              SÍ, Eliminar y Devolver
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog >
+      <ConfirmDeleteWithJustificationDialog
+        open={!!deleteTargetId}
+        onClose={() => setDeleteTargetId(null)}
+        onConfirm={confirmDelete}
+        isLoading={deleteMutation.isPending || isActionLoading}
+        title="¿Eliminar Registro de Consumo?"
+        description="Esta acción eliminará el registro de consumo. Se requiere una justificación."
+        isAdmin={isAdmin}
+        isCritical={true}
+        checkboxes={[
+          { id: 'devolverStock', label: 'Devolver los litros al estanque', defaultValue: true }
+        ]}
+      />
 
       {/* Modal de Selección de Estanque para Formulario Excel */}
       <Dialog open={isTankSelectionOpen} onOpenChange={setIsTankSelectionOpen}>

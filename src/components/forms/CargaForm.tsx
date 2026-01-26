@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Info } from 'lucide-react';
+import { getLocalDate } from '@/lib/utils';
 
 interface CargaFormProps {
     open: boolean;
@@ -43,12 +44,12 @@ export function CargaForm({
     } = useForm<CargaFormData>({
         resolver: zodResolver(cargaSchema),
         defaultValues: initialData || {
-            fecha: new Date().toISOString().split('T')[0],
+            fecha: getLocalDate(),
             tipo: 'real',
             litros: 0,
             proveedor: 'COPEC',
             responsable: 'Admin', // Added default for responsable
-            fechaProgramada: new Date().toISOString().split('T')[0], // Added default for fechaProgramada
+            fechaProgramada: getLocalDate(), // Added default for fechaProgramada
         },
     });
 
@@ -56,12 +57,12 @@ export function CargaForm({
     useEffect(() => {
         if (open) {
             reset({
-                fecha: new Date().toISOString().split('T')[0],
+                fecha: getLocalDate(),
                 tipo: 'real',
                 litros: 0,
                 proveedor: 'COPEC',
                 responsable: 'Admin', // Added default for responsable
-                fechaProgramada: new Date().toISOString().split('T')[0], // Added default for fechaProgramada
+                fechaProgramada: getLocalDate(), // Added default for fechaProgramada
                 ...initialData
             });
         }
@@ -111,7 +112,7 @@ export function CargaForm({
                                 id="fecha"
                                 type="date"
                                 {...register('fecha')}
-                                max={new Date().toISOString().split('T')[0]}
+                                max={getLocalDate()}
                             />
                             {errors.fecha && (
                                 <p className="text-sm text-destructive">{errors.fecha.message}</p>
@@ -124,7 +125,7 @@ export function CargaForm({
                                 id="fechaProgramada"
                                 type="date"
                                 {...register('fechaProgramada')}
-                                min={new Date().toISOString().split('T')[0]}
+                                min={getLocalDate()}
                             />
                             {errors.fechaProgramada && (
                                 <p className="text-sm text-destructive">{errors.fechaProgramada.message}</p>

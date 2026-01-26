@@ -1,5 +1,5 @@
 /**
- * CRUD OPERATIONS: AGENDAMIENTOS
+ * CRUD OPERATIONS: CARGAS AGENDADAS/PROGRAMADAS
  */
 
 function handleAgendamientosGet(action, id) {
@@ -87,26 +87,13 @@ function updateAgendamiento(id, data) {
     const rowIndex = parseInt(id);
     
     if (rowIndex > 1 && rowIndex <= sheet.getLastRow()) {
-      const row = Array(12).fill('');
-      // Preserve original creation date or update? Usually preserve. 
-      // But data.fecha might be the new date?
-      // For editing, we overwrite everything provided.
-      
-      // We need to construct the range carefully or set values cell by cell?
-      // appendRow is easy. setValues needs array.
-      // Let's re-construct the row array mapping.
-      
       const range = sheet.getRange(rowIndex, 1, 1, 12);
       const currentValues = range.getValues()[0];
-      
-      // Merge current values with new data
-      // Note: COLUMNS indices are 0-based.
       
       const newValues = [...currentValues];
       
       if (data.fecha) newValues[COLUMNS.AGENDAMIENTOS.FECHA] = data.fecha;
       if (data.fechaProgramada) newValues[COLUMNS.AGENDAMIENTOS.FECHA_PROGRAMADA] = data.fechaProgramada;
-      // Tipo usually stays 'programada'
       if (data.numeroGuia) newValues[COLUMNS.AGENDAMIENTOS.NUMERO_GUIA] = data.numeroGuia;
       if (data.estanque) newValues[COLUMNS.AGENDAMIENTOS.ESTANQUE] = data.estanque;
       if (data.proveedor) newValues[COLUMNS.AGENDAMIENTOS.PROVEEDOR] = data.proveedor;
@@ -146,12 +133,5 @@ function ensureAgendamientosHeaders(sheet) {
   
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(HEADER_ROW);
-  } else {
-    // If we have rows, check if the first cell of the first row is what we expect
-    const firstValue = sheet.getRange(1, 1).getValue();
-    if (firstValue !== 'FECHA') {
-      sheet.insertRowBefore(1);
-      sheet.getRange(1, 1, 1, HEADER_ROW.length).setValues([HEADER_ROW]);
-    }
   }
 }

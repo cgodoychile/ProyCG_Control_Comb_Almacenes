@@ -1,6 +1,21 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { auditoriaApi } from '@/lib/apiService';
+import {
+    auditoriaApi,
+    estanquesApi,
+    vehiculosApi,
+    almacenesApi,
+    productosAlmacenApi,
+    personasApi,
+    usuariosApi,
+    activosApi,
+    consumosApi,
+    mantencionesApi
+} from '@/lib/apiService';
+import { useApi } from '@/hooks/useApi';
+import { useToast } from '@/hooks/use-toast';
+import { useQueryClient } from '@tanstack/react-query';
+import { Check, X, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { KPICard } from '@/components/dashboard/KPICard';
@@ -32,6 +47,9 @@ import { DateRangeFilter } from '@/components/shared/DateRangeFilter';
 
 export function AuditoriaModule() {
     const { user, isAdmin } = useAuth();
+    const { toast } = useToast();
+    const queryClient = useQueryClient();
+    const { execute, loading: isActionLoading } = useApi();
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedModule, setSelectedModule] = useState<string>('todos');
     const [selectedAction, setSelectedAction] = useState<string>('todas');
@@ -103,6 +121,7 @@ export function AuditoriaModule() {
             case 'eliminar': return 'Eliminación';
             case 'ver': return 'Visualización';
             case 'movimiento': return 'Movimiento';
+            case 'solicitud_eliminacion': return 'Solicitud de Eliminación';
             default: return action.charAt(0).toUpperCase() + action.slice(1);
         }
     };
@@ -113,6 +132,7 @@ export function AuditoriaModule() {
             case 'actualizar': case 'editar': return <Edit className="w-4 h-4" />;
             case 'eliminar': return <Trash2 className="w-4 h-4" />;
             case 'ver': return <Eye className="w-4 h-4" />;
+            case 'solicitud_eliminacion': return <AlertTriangle className="w-4 h-4" />;
             default: return <FileText className="w-4 h-4" />;
         }
     };
@@ -123,8 +143,96 @@ export function AuditoriaModule() {
             case 'actualizar': case 'editar': return 'text-warning';
             case 'eliminar': return 'text-destructive';
             case 'ver': return 'text-blue-500';
+            case 'solicitud_eliminacion': return 'text-orange-500';
             default: return 'text-muted-foreground';
         }
+    };
+
+    const handleApproveDelete = async (log: any) => {
+        let entityType = '';
+        let entityId = '';
+        let justification = log.justificacion || "Aprobado por administrador";
+        let deleteFromWarehouse = false;
+
+        // Try to parse JSON first (New format)
+        if (log.mensaje && log.mensaje.trim().startsWith('{')) {
+            try {
+                const metadata = JSON.parse(log.mensaje);
+                entityType = metadata.entity || '';
+                entityId = metadata.id || '';
+                deleteFromWarehouse = metadata.deleteFromWarehouse === true;
+                if (metadata.justification) justification = metadata.justification;
+            } catch (e) {
+                console.warn('Error parsing JSON log message:', e);
+            }
+        }
+
+        // Fallback to Regex (Legacy format)
+        if (!entityType || !entityId) {
+            const regex = /Solicitud de eliminación de ([^:]+): .* \(ID: ([^)]+)\)/;
+            const match = log.mensaje.match(regex);
+            if (match) {
+                entityType = match[1].toLowerCase();
+                entityId = match[2];
+            }
+        }
+
+        if (!entityType || !entityId) {
+            toast({ variant: "destructive", title: "❌ Error", description: "No se pudo identificar la entidad o el ID a eliminar." });
+            return;
+        }
+
+        const normalizedEntity = entityType.toLowerCase().trim();
+        let api: any;
+
+        // Map entity to API and ensure correct string for backend switch
+        let backendEntity = normalizedEntity;
+
+        switch (normalizedEntity) {
+            case 'estanque': case 'estanques': api = estanquesApi; backendEntity = 'estanques'; break;
+            case 'vehículo': case 'vehiculo': case 'vehiculos': api = vehiculosApi; backendEntity = 'vehiculos'; break;
+            case 'almacén': case 'almacen': case 'almacenes': api = almacenesApi; backendEntity = 'almacenes'; break;
+            case 'producto': case 'productos': api = productosAlmacenApi; backendEntity = 'productos'; break;
+            case 'usuario': case 'usuarios': api = usuariosApi; backendEntity = 'usuarios'; break;
+            case 'persona': case 'personas': api = personasApi; backendEntity = 'personas'; break;
+            case 'activo': case 'activos': api = activosApi; backendEntity = 'activos'; break;
+            case 'consumo': case 'consumos': api = consumosApi; backendEntity = 'consumos'; break;
+            case 'mantención': case 'mantencion': case 'mantenciones': api = mantencionesApi; backendEntity = 'mantenciones'; break;
+            default:
+                toast({ variant: "destructive", title: "❌ Error", description: `Módulo '${entityType}' no soportado para aprobación automática.` });
+                return;
+        }
+
+        // Use the Alerts API approveAndDelet flow which handles the cross-logic in backend
+        await execute(auditoriaApi.update(log.id, {
+            action: 'approveAndDelete',
+            targetEntity: backendEntity,
+            targetId: entityId,
+            justification: justification,
+            deleteFromWarehouse: deleteFromWarehouse
+        } as any), {
+            successMessage: "Eliminación ejecutada exitosamente.",
+            onSuccess: () => {
+                queryClient.invalidateQueries();
+            }
+        });
+    };
+
+    const handleRejectDelete = async (log: any) => {
+        // Just record the rejection in audit log
+        await execute(auditoriaApi.create({
+            modulo: 'Auditoría',
+            accion: 'rechazo_eliminacion',
+            mensaje: `RECHAZADO: Solicitud de eliminación para ${log.modulo} (ID: ${log.mensaje.match(/\(ID: ([^)]+)\)/)?.[1] || '?'})`,
+            tipo: 'info',
+            usuario: user?.email || 'Admin',
+            justificacion: 'Rechazado por administrador'
+        }), {
+            successMessage: "Solicitud rechazada y registrada.",
+            onSuccess: () => {
+                queryClient.invalidateQueries({ queryKey: ['audit-logs'] });
+            }
+        });
     };
 
     const getTypeLabel = (type: string) => {
@@ -283,6 +391,7 @@ export function AuditoriaModule() {
                                 <th>Descripción</th>
                                 <th className="w-[150px]">Usuario</th>
                                 <th className="w-[80px]">Tipo</th>
+                                {isAdmin && <th className="w-[100px] text-right">Acciones</th>}
                             </tr>
                         </thead>
                         <tbody>
@@ -335,6 +444,34 @@ export function AuditoriaModule() {
                                                 {getTypeLabel(log.tipo || '')}
                                             </span>
                                         </td>
+                                        {isAdmin && (
+                                            <td className="text-right">
+                                                {log.accionRealizada === 'solicitud_eliminacion' && (
+                                                    <div className="flex justify-end gap-1">
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className="h-7 w-7 p-0 text-success hover:bg-success/10"
+                                                            onClick={() => handleApproveDelete(log)}
+                                                            title="Aprobar y Eliminar"
+                                                            disabled={isActionLoading}
+                                                        >
+                                                            <Check className="w-4 h-4" />
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+                                                            onClick={() => handleRejectDelete(log)}
+                                                            title="Rechazar solicitud"
+                                                            disabled={isActionLoading}
+                                                        >
+                                                            <X className="w-4 h-4" />
+                                                        </Button>
+                                                    </div>
+                                                )}
+                                            </td>
+                                        )}
                                     </tr>
                                 ))
                             )}

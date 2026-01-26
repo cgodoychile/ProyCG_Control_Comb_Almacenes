@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { mantencionesApi, vehiculosApi } from '@/lib/apiService';
+import { mantencionesApi, vehiculosApi, auditoriaApi } from '@/lib/apiService';
+import { useApi } from '@/hooks/useApi';
 import { MantencionForm, MantencionFormData } from '@/components/forms/MantencionForm';
 import { Button } from '@/components/ui/button';
 import { Plus, Edit, Trash2, Wrench, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
-import { ConfirmDeleteDialog } from '@/components/shared/ConfirmDeleteDialog';
+import { ConfirmDeleteWithJustificationDialog } from '@/components/shared/ConfirmDeleteWithJustificationDialog';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -14,7 +15,8 @@ import { useAuth } from '@/context/AuthContext';
 import { speakSuccess } from '@/utils/voiceNotification';
 
 export function MantencionesModule() {
-    const { canEdit } = useAuth();
+    const { canEdit, isAdmin, user } = useAuth();
+    const { execute, loading: isActionLoading } = useApi();
 
     // Helper function to safely format dates
     const formatSafeDate = (dateString: string | null | undefined) => {
@@ -92,7 +94,8 @@ export function MantencionesModule() {
 
 
     const deleteMutation = useMutation({
-        mutationFn: mantencionesApi.delete,
+        mutationFn: ({ id, justification }: { id: string, justification: string }) =>
+            mantencionesApi.delete(id, { justificacion: justification }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['mantenciones'] });
             toast({ title: "✅ Mantención eliminada", description: "El registro ha sido eliminado." });
@@ -118,11 +121,37 @@ export function MantencionesModule() {
         setIsDeleteDialogOpen(true);
     };
 
-    const confirmDelete = async () => {
+    const confirmDelete = async (justification: string) => {
         if (!idToDelete) return;
-        await deleteMutation.mutateAsync(idToDelete);
-        setIsDeleteDialogOpen(false);
-        setIdToDelete(null);
+
+        if (!isAdmin) {
+            // Flow for non-admins: Send a deletion request
+            const mantencion = mantenciones.find(m => m.id === idToDelete);
+            const mName = mantencion ? `${mantencion.vehiculo} - ${mantencion.tipoMantencion}` : idToDelete;
+
+            await execute(
+                auditoriaApi.create({
+                    modulo: 'Mantenciones',
+                    accion: 'solicitud_eliminacion',
+                    mensaje: `Solicitud de eliminación de Mantención: ${mName} (ID: ${idToDelete})`,
+                    tipo: 'warning',
+                    usuario: user?.email || 'Usuario',
+                    justificacion: justification
+                }),
+                {
+                    successMessage: "Solicitud de eliminación enviada para aprobación del administrador.",
+                    onSuccess: () => {
+                        setIsDeleteDialogOpen(false);
+                        setIdToDelete(null);
+                    }
+                }
+            );
+        } else {
+            // Flow for admins: Direct deletion
+            await deleteMutation.mutateAsync({ id: idToDelete, justification });
+            setIsDeleteDialogOpen(false);
+            setIdToDelete(null);
+        }
     };
 
     const handleSubmit = async (data: MantencionFormData) => {
@@ -269,7 +298,7 @@ export function MantencionesModule() {
                                         <span className={cn(
                                             "px-2 py-0.5 rounded-full text-[10px] uppercase font-bold",
                                             m.estado === 'Completada' ? "bg-success/10 text-success" :
-                                                m.estado === 'Pendiente' ? "bg-critical/10 text-critical" :
+                                                m.estado === 'En Proceso' ? "bg-critical/10 text-critical" :
                                                     "bg-warning/10 text-warning"
                                         )}>
                                             {m.estado}
@@ -326,11 +355,16 @@ export function MantencionesModule() {
                 isLoading={createMutation.isPending || updateMutation.isPending}
             />
             {/* Confirmation Dialog */}
-            <ConfirmDeleteDialog
+            <ConfirmDeleteWithJustificationDialog
                 open={isDeleteDialogOpen}
                 onClose={() => setIsDeleteDialogOpen(false)}
                 onConfirm={confirmDelete}
-                isLoading={deleteMutation.isPending}
+                isLoading={deleteMutation.isPending || isActionLoading}
+                title="¿Eliminar Mantención?"
+                description="Esta acción eliminará el registro de mantención. Se requiere una justificación."
+                itemName={idToDelete || undefined}
+                isAdmin={isAdmin}
+                isCritical={true}
             />
         </div>
     );

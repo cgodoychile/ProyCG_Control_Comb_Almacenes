@@ -52,8 +52,8 @@ export const productosAlmacenApi = {
         // Enviamos el ID tanto en la URL como en el cuerpo para máxima compatibilidad
         return apiFetch<any>('productos', 'update', { method: 'POST', id, body: { ...data, id } });
     },
-    delete: (id: string) =>
-        apiFetch<void>('productos', 'delete', { method: 'POST', id, body: {} }),
+    delete: (id: string, body: any = {}) =>
+        apiFetch<void>('productos', 'delete', { method: 'POST', id, body }),
 };
 
 // Movimientos Almacen API

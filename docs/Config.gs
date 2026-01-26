@@ -2,7 +2,8 @@
 // CORRECTED Config.gs - Based on Actual Sheet Structure
 // ============================================
 
-const SPREADSHEETID = '1vqCOLrIqjGNLCOkAcXNzLxNPMdDQmDhkPYxdPHcBzQY';
+var SPREADSHEETID = '1t9lhDEZobOfulN2EZXgnxdnP-DSJtkHemFH5yYep0Kc';
+var SPREADSHEET_ID = SPREADSHEETID; // Alias for backward compatibility
 
 const SHEET_NAMES = {
   CONSUMOS: 'EnelComb',
@@ -17,7 +18,8 @@ const SHEET_NAMES = {
   PRODUCTOS_ALMACEN: 'PRODUCTOS_ALMACEN',
   MOVIMIENTOS_ALMACEN: 'MOVIMIENTOS_ALMACEN',
   PERSONAS: 'Personas',
-  AUDITORIA: 'Auditoria'
+  AUDITORIA: 'Auditoria',
+  ALERTA: 'Alertas'
 };
 
 const COLUMNS = {
@@ -178,6 +180,15 @@ const COLUMNS = {
     ACCION: 4,
     MENSAJE: 5,
     TIPO: 6
+  },
+  ALERTA: {
+    ID: 0,
+    TIPO: 1,
+    MENSAJE: 2,
+    MODULO: 3,
+    FECHA: 4,
+    LEIDA: 5,
+    ACCION: 6
   }
 };
 
@@ -252,4 +263,3 @@ function repairInventoryHeaders() {
 
   return "Reparación completada. Columnas aseguradas en PRODUCTOS Y MOVIMIENTOS.";
 }
-

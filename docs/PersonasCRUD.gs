@@ -14,7 +14,7 @@ function handlePersonasPost(action, id, data) {
   switch (action.toLowerCase()) {
     case 'create': return createPersona(data);
     case 'update': return updatePersona(id, data);
-    case 'delete': return deletePersona(id);
+    case 'delete': return deletePersona(id, data);
     default: return createErrorResponse('Acción no válida', 400);
   }
 }
@@ -148,10 +148,11 @@ function createPersona(data) {
     const dataRows = sheet.getDataRange().getValues();
     const idIdx = colMap.ID !== -1 ? colMap.ID : COLUMNS.PERSONAS.ID;
 
-    // Check duplicates
+    // Idempotency check: if it already exists, return success to clear sync queue
     for (let i = 1; i < dataRows.length; i++) {
-      if (dataRows[i][idIdx] === data.id) {
-        throw new Error('Ya existe una persona con este ID');
+      if (String(dataRows[i][idIdx]).trim() === String(data.id).trim()) {
+        console.warn("Person already exists, returning success for idempotency: " + data.id);
+        return createResponse(true, { id: data.id, ...data, _isDuplicate: true }, "Esta persona ya está registrada");
       }
     }
     
@@ -244,29 +245,23 @@ function updatePersona(id, data) {
   }
 }
 
-function deletePersona(id) {
+function deletePersona(id, data) {
   try {
     if (!id) throw new Error('ID es requerido');
     const sheet = getSheet(SHEET_NAMES.PERSONAS);
-    const data = sheet.getDataRange().getValues();
-    
-    // DYNAMIC MAP needed to find ID column
     const colMap = findColumnIndices(sheet, {
-        ID: ['ID', 'RUT', 'DNI'],
-        NOMBRE: ['NOMBRE', 'NOMBRE_COMPLETO']
+        ID: ['ID', 'RUT', 'DNI']
     });
     const idIdx = colMap.ID !== -1 ? colMap.ID : COLUMNS.PERSONAS.ID;
-    const nmIdx = colMap.NOMBRE !== -1 ? colMap.NOMBRE : COLUMNS.PERSONAS.NOMBRE_COMPLETO;
-
-    for (let i = 1; i < data.length; i++) {
-        if (data[i][idIdx] === id) {
-            const nombrePersona = data[i][nmIdx] || 'Sin Nombre';
-            sheet.deleteRow(i + 1);
-            
-            registrarAccion('Personas', 'eliminar', `Persona eliminada: ${nombrePersona} (${id})`, 'warning', null);
-            
-            return createResponse(true, { message: 'Persona eliminada' });
-        }
+    const sheetData = sheet.getDataRange().getValues();
+    
+    for (let i = 1; i < sheetData.length; i++) {
+      if (String(sheetData[i][idIdx]) === String(id)) {
+        sheet.deleteRow(i + 1);
+        // Audit Log
+        registrarAccion('Personas', 'eliminar', `Persona ${id} eliminada`, 'warning', null, data ? data.justificacion : null);
+        return createResponse(true, { message: 'Persona eliminada' });
+      }
     }
     throw new Error('Persona no encontrada');
   } catch (error) {

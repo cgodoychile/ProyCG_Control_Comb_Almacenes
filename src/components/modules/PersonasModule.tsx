@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { personasApi, consumosApi, vehiculosApi, movimientosAlmacenApi } from '@/lib/apiService';
+import { personasApi, consumosApi, vehiculosApi, movimientosAlmacenApi, auditoriaApi } from '@/lib/apiService';
 import { PersonaForm } from '@/components/forms/PersonaForm';
 import { PersonaDetailView } from './PersonaDetailView';
 import {
@@ -24,17 +24,20 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { speakSuccess } from '@/utils/voiceNotification';
 import { useApi } from '@/hooks/useApi';
+import { ConfirmDeleteWithJustificationDialog } from '@/components/shared/ConfirmDeleteWithJustificationDialog';
 import type { Persona } from '@/types/crm';
 
 export function PersonasModule() {
     const { toast } = useToast();
-    const { canEdit } = useAuth();
+    const { canEdit, isAdmin, user } = useAuth();
     const queryClient = useQueryClient();
 
     const [searchTerm, setSearchTerm] = useState("");
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingPersona, setEditingPersona] = useState<Persona | null>(null);
     const [selectedPersonaId, setSelectedPersonaId] = useState<string | null>(null);
+    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+    const [personaToDelete, setPersonaToDelete] = useState<Persona | null>(null);
 
     // Initial Fetch
     const { data: personasResponse, isLoading } = useQuery({
@@ -92,11 +95,13 @@ export function PersonasModule() {
         });
     };
 
-    const handleDelete = async (id: string) => {
-        await execute(personasApi.delete(id), {
+    const handleDelete = async (id: string, justification: string) => {
+        await execute(personasApi.delete(id, { justificacion: justification }), {
             successMessage: "Persona eliminada correctamente.",
             onSuccess: () => {
                 queryClient.invalidateQueries({ queryKey: ['personas'] });
+                setIsDeleteDialogOpen(false);
+                setPersonaToDelete(null);
             }
         });
     };
@@ -267,9 +272,8 @@ export function PersonasModule() {
                                                         className="h-8 w-8 hover:bg-destructive/10"
                                                         disabled={isActionLoading}
                                                         onClick={() => {
-                                                            if (confirm(`¿Eliminar a ${persona.nombreCompleto}?`)) {
-                                                                handleDelete(persona.id);
-                                                            }
+                                                            setPersonaToDelete(persona);
+                                                            setIsDeleteDialogOpen(true);
                                                         }}
                                                     >
                                                         <Trash2 className="w-4 h-4 text-destructive" />
@@ -299,6 +303,48 @@ export function PersonasModule() {
                         handleCreate(data);
                     }
                 }}
+            />
+
+            <ConfirmDeleteWithJustificationDialog
+                open={isDeleteDialogOpen}
+                onClose={() => {
+                    setIsDeleteDialogOpen(false);
+                    setPersonaToDelete(null);
+                }}
+                onConfirm={async (justification) => {
+                    if (!personaToDelete) return;
+
+                    // Flow for EVERYONE: Send a deletion request
+                    await execute(
+                        auditoriaApi.create({
+                            modulo: 'Personas',
+                            accion: 'solicitud_eliminacion',
+                            mensaje: JSON.stringify({
+                                entity: 'personas',
+                                id: personaToDelete.id,
+                                name: personaToDelete.nombreCompleto,
+                                justification: justification
+                            }),
+                            tipo: 'warning',
+                            usuario: user?.email || 'Usuario',
+                            justificacion: justification
+                        }),
+                        {
+                            successMessage: "Solicitud de eliminación enviada para aprobación del administrador.",
+                            onSuccess: () => {
+                                setIsDeleteDialogOpen(false);
+                                setPersonaToDelete(null);
+                                queryClient.invalidateQueries({ queryKey: ['activity-alerts'] });
+                            }
+                        }
+                    );
+                }}
+                isLoading={isActionLoading}
+                title="¿Eliminar Persona?"
+                description="Esta acción eliminará permanentemente a la persona del sistema. Se requiere una justificación."
+                itemName={personaToDelete?.nombreCompleto}
+                isAdmin={isAdmin}
+                isCritical={true}
             />
         </div>
     );

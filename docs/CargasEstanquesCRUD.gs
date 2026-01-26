@@ -1,7 +1,3 @@
-/**
- * CRUD OPERATIONS: CARGAS ESTANQUES
- */
-
 function handleCargasGet(action, id) {
   switch (action.toLowerCase()) {
     case 'getall': return getAllCargas();
@@ -89,7 +85,25 @@ function createCarga(data) {
   }
 }
 
-// Helper to update stock (same logic as before, just ensuring it uses the shared helper or internal logic)
-// In this unified version, updateEstanqueStock is in EstanquesCRUD or Config?
-// IMPORTANT: updateEstanqueStock was defined in EstanquesCRUD.gs. 
-// Cross-file calls work in GAS if they are in the same project.
+function updateEstanqueStock(nombre, litros) {
+    try {
+        const sheet = getSheet(SHEET_NAMES.ESTANQUES);
+        const data = sheet.getDataRange().getValues();
+        let rowIndex = -1;
+
+        for (let i = 1; i < data.length; i++) {
+            if (data[i][COLUMNS.ESTANQUES.NOMBRE] === nombre) {
+                rowIndex = i + 1;
+                break;
+            }
+        }
+
+        if (rowIndex !== -1) {
+            const currentStock = parseFloat(data[rowIndex-1][COLUMNS.ESTANQUES.STOCK_ACTUAL]) || 0;
+            sheet.getRange(rowIndex, COLUMNS.ESTANQUES.STOCK_ACTUAL + 1).setValue(currentStock + litros);
+            sheet.getRange(rowIndex, COLUMNS.ESTANQUES.FECHA_ULTIMA_CARGA + 1).setValue(new Date());
+        }
+    } catch (error) {
+        Logger.log('Error updating estanque stock: ' + error.toString());
+    }
+}

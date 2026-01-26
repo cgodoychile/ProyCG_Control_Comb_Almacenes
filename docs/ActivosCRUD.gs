@@ -14,7 +14,7 @@ function handleActivosPost(action, id, data) {
   switch (action.toLowerCase()) {
     case 'create': return createActivo(data);
     case 'update': return updateActivo(id, data);
-    case 'delete': return deleteActivo(id);
+    case 'delete': return deleteActivo(id, data);
     default: return createErrorResponse('Acción no válida', 400);
   }
 }
@@ -118,16 +118,26 @@ function createActivo(data) {
   try {
     const sheet = getSheet(SHEET_NAMES.ACTIVOS);
     
+    // Idempotency check 
+    const duplicateResponse = checkIdempotency(sheet, data.clientRequestId, COLUMNS.ACTIVOS.ID);
+    if (duplicateResponse) return duplicateResponse;
+
     // Generate automatic code if not provided
-    if (!data.id && data.categoria) {
+    if (data.clientRequestId) {
+      data.id = data.clientRequestId;
+    } else if (!data.id && data.categoria) {
       data.id = generateAssetCode(data.categoria);
     } else if (!data.id) {
       data.id = 'ACT-' + new Date().getTime();
     }
     
-    // Check duplicates
-    const existing = getAllActivos().data.find(a => a.id === data.id);
-    if (existing) throw new Error("ID ya existe");
+    // Check duplicates (natural ID)
+    const dataValues = sheet.getDataRange().getValues();
+    for (let i = 1; i < dataValues.length; i++) {
+        if (String(dataValues[i][COLUMNS.ACTIVOS.ID]).trim() === String(data.id).trim()) {
+            return createResponse(true, { ...data, _isDuplicate: true }, "Este activo ya está registrado");
+        }
+    }
 
     const newRow = Array(8).fill('');
     newRow[COLUMNS.ACTIVOS.ID] = data.id;
@@ -179,21 +189,67 @@ function updateActivo(id, data) {
     }
 }
 
-function deleteActivo(id) {
-    try {
-        const sheet = getSheet(SHEET_NAMES.ACTIVOS);
-        const data = sheet.getDataRange().getValues();
-        for (let i = 1; i < data.length; i++) {
-            const rowId = String(data[i][COLUMNS.ACTIVOS.ID]).trim();
-            const targetId = String(id).trim();
-            
-            if (rowId === targetId) {
-                sheet.deleteRow(i + 1);
-                return createResponse(true, { message: "Activo eliminado" });
-            }
+function deleteActivo(id, data) {
+  try {
+    const sheet = getSheet(SHEET_NAMES.ACTIVOS);
+    const dataValues = sheet.getDataRange().getValues();
+    
+    // Find Asset and its Name first
+    let assetName = null;
+    let rowIndex = -1;
+
+    for (let i = 1; i < dataValues.length; i++) {
+        if (dataValues[i][COLUMNS.ACTIVOS.ID] == id) {
+            assetName = dataValues[i][COLUMNS.ACTIVOS.NOMBRE];
+            rowIndex = i + 1;
+            break;
         }
-        throw new Error("Activo no encontrado (ID: " + id + ")");
-    } catch (error) {
-        return createResponse(false, null, error.toString());
     }
+
+    if (rowIndex === -1) throw new Error('Activo no encontrado');
+
+    // 1. Delete from ACTIVOS
+    sheet.deleteRow(rowIndex);
+
+    // 2. Sync: Delete from PRODUCTOS_ALMACEN if requested
+    let syncMsg = '';
+    const shouldDeleteFromWarehouse = data && data.deleteFromWarehouse === true;
+
+    if (shouldDeleteFromWarehouse) {
+      try {
+        const pSheet = getSheet(SHEET_NAMES.PRODUCTOS_ALMACEN);
+        const pData = pSheet.getDataRange().getValues();
+        const pColMap = getProductosColMap(pSheet);
+        const descIdx = pColMap.DESCRIPCION !== -1 ? pColMap.DESCRIPCION : 14;
+
+        // Search for "Activo: [ID]" in description to find ALL instances (if moved across warehouses)
+        let deletedInBodega = 0;
+        const targetSearch = `Activo: ${id}`;
+
+        // Iterate backwards to safely delete multiple rows
+        for (let j = pData.length - 1; j >= 1; j--) {
+          const desc = String(pData[j][descIdx] || '');
+          if (desc.includes(targetSearch)) {
+            pSheet.deleteRow(j + 1);
+            deletedInBodega++;
+          }
+        }
+        
+        if (deletedInBodega > 0) {
+          syncMsg = ` (y su registro en bodega eliminado: ${deletedInBodega} ítems)`;
+        }
+      } catch (e) {
+        console.warn('Error syncing delete with Bodega: ' + e.toString());
+        syncMsg = ' (error al sincronizar con bodega)';
+      }
+    }
+
+    // Audit Log
+    registrarAccion('Activos', 'eliminar', `Activo ${assetName || id} eliminado${syncMsg}`, 'warning', null, data ? data.justificacion : null);
+    
+    return createResponse(true, { message: 'Activo eliminado' + syncMsg });
+
+  } catch (error) {
+    return createResponse(false, null, error.toString());
+  }
 }

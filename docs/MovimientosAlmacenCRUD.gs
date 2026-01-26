@@ -13,7 +13,7 @@ function handleMovimientosGet(action, id, almacenId) {
 function handleMovimientosPost(action, id, data) {
   switch (action.toLowerCase()) {
     case 'create': return createMovimiento(data);
-    case 'delete': return deleteMovimiento(id);
+    case 'delete': return deleteMovimiento(id, data);
     default: return createErrorResponse('Acción no válida', 400);
   }
 }
@@ -112,6 +112,25 @@ function fetchProductNamesMap() {
     return map;
 }
 
+function fetchAlmacenNamesMap() {
+    const sheet = getSheet(SHEET_NAMES.ALMACENES);
+    const data = sheet.getDataRange().getValues();
+    const colMap = findColumnIndices(sheet, { 
+      ID: ['ID', 'ID_ALMACEN'], 
+      NOMBRE: ['NOMBRE'] 
+    });
+    
+    const idIdx = colMap.ID !== -1 ? colMap.ID : 0;
+    const nmIdx = colMap.NOMBRE !== -1 ? colMap.NOMBRE : 1;
+    
+    const map = {};
+    for (let j = 1; j < data.length; j++) {
+        const id = String(data[j][idIdx] || '').trim();
+        if (id) map[id] = data[j][nmIdx];
+    }
+    return map;
+}
+
 function mapRowToMovimiento(row, colMap, productMap) {
     const getVal = (key, fallbackIdx) => {
         const idx = colMap[key] !== -1 ? colMap[key] : fallbackIdx;
@@ -160,6 +179,12 @@ function createMovimiento(data) {
         const retIdx_P = colMapProd.RETORNABLE !== -1 ? colMapProd.RETORNABLE : COLUMNS.PRODUCTOS_ALMACEN.ES_RETORNABLE;
 
         const prodData = prodSheet.getDataRange().getValues();
+        
+        // Idempotency check 
+        const idIdx_M = colMapMov.ID !== -1 ? colMapMov.ID : COLUMNS.MOVIMIENTOS_ALMACEN.ID;
+        const duplicateResponse = checkIdempotency(sheet, data.clientRequestId, idIdx_M);
+        if (duplicateResponse) return duplicateResponse;
+
         const cantidad = Number(data.cantidad);
         if (isNaN(cantidad) || cantidad <= 0) throw new Error("Cantidad inválida");
 
@@ -233,50 +258,49 @@ function createMovimiento(data) {
             }
         }
 
-        // Add Movement Record
-        const maxIdxM = Math.max(...Object.values(colMapMov), 12);
-        const newRowM = Array(maxIdxM + 1).fill('');
-        
-        const setValM = (key, fallbackIdx, val) => {
-            const idx = colMapMov[key] !== -1 ? colMapMov[key] : fallbackIdx;
-            if (idx !== -1) newRowM[idx] = val;
-        };
-
-        const movId = 'MOV-' + new Date().getTime();
-        setValM('ID', COLUMNS.MOVIMIENTOS_ALMACEN.ID, movId);
-        setValM('PROD_ID', COLUMNS.MOVIMIENTOS_ALMACEN.PRODUCTO_ID, targetProdId);
-        setValM('TIPO', COLUMNS.MOVIMIENTOS_ALMACEN.TIPO, data.tipo);
-        setValM('ALM_ORIGEN', COLUMNS.MOVIMIENTOS_ALMACEN.ALMACEN_ORIGEN, tipo === 'entrada' ? '' : targetAlmId);
-        setValM('ALM_DESTINO', COLUMNS.MOVIMIENTOS_ALMACEN.ALMACEN_DESTINO, (tipo === 'salida' || tipo === 'baja') ? '' : (data.almacenDestino || targetAlmId));
-        setValM('CANTIDAD', COLUMNS.MOVIMIENTOS_ALMACEN.CANTIDAD, cantidad);
-        setValM('FECHA', COLUMNS.MOVIMIENTOS_ALMACEN.FECHA, formatDateTime(new Date()));
-        setValM('RESPONSABLE', COLUMNS.MOVIMIENTOS_ALMACEN.RESPONSABLE, data.responsable);
-        setValM('GUIA', COLUMNS.MOVIMIENTOS_ALMACEN.GUIA_REFERENCIA, data.guiaReferencia || '');
-        setValM('MOTIVO', COLUMNS.MOVIMIENTOS_ALMACEN.MOTIVO, data.motivo || '');
-        setValM('PROVEEDOR', COLUMNS.MOVIMIENTOS_ALMACEN.PROVEEDOR_TRANSPORTE, data.proveedorTransporte || data.proveedor || '');
-        setValM('OBSERVACIONES', COLUMNS.MOVIMIENTOS_ALMACEN.OBSERVACIONES, data.observaciones || '');
-        setValM('FECHA_DEVOLUCION', 12, data.fechaDevolucion ? formatDate(data.fechaDevolucion) : '');
-
         sheet.appendRow(newRowM);
-        const actionMsg = `Movimiento de ${tipo.toUpperCase()}: ${cantidad} ${data.unidad || ''} de ${data.productoNombre || targetProdId}`;
-        registrarAccion('Almacenes', 'movimiento', actionMsg, 'info', data.responsable);
+        
+        // Detailed Audit Log with Names instead of IDs
+        const productMap = fetchProductNamesMap();
+        const almacenMap = fetchAlmacenNamesMap();
+        
+        const productName = productMap[targetProdId] || targetProdId;
+        const originName = almacenMap[targetAlmId] || targetAlmId;
+        const destName = almacenMap[targetAlmDest] || targetAlmDest;
+
+        let auditMsg = `Movimiento de ${tipo.toUpperCase()}: ${cantidad} ${data.unidad || ''} de ${productName}`;
+        if (tipo === 'traslado') {
+            auditMsg += ` desde ${originName} hacia ${destName}`;
+        } else if (tipo === 'salida' || tipo === 'retorno') {
+            auditMsg += ` en ${originName}`;
+        } else if (tipo === 'entrada') {
+            auditMsg += ` en ${destName}`;
+        }
+        
+        registrarAccion('Almacenes', 'movimiento', auditMsg, 'info', data.responsable, data.motivo || data.justificacion);
+        
         return createResponse(true, { id: movId, ...data });
     } catch (error) {
         return createResponse(false, null, error.toString());
     }
 }
 
-function deleteMovimiento(id) {
+function deleteMovimiento(id, data) {
     try {
         const sheet = getSheet(SHEET_NAMES.MOVIMIENTOS_ALMACEN);
         const colMap = getMovimientosColMap(sheet);
         const idIdx = colMap.ID !== -1 ? colMap.ID : COLUMNS.MOVIMIENTOS_ALMACEN.ID;
-        const data = sheet.getDataRange().getValues();
+        const sheetData = sheet.getDataRange().getValues();
         const targetId = String(id).trim();
 
-        for (let i = 1; i < data.length; i++) {
-            if (String(data[i][idIdx]).trim() === targetId) {
+        for (let i = 1; i < sheetData.length; i++) {
+            if (String(sheetData[i][idIdx]).trim() === targetId) {
+                const prodId = sheetData[i][colMap.PROD_ID !== -1 ? colMap.PROD_ID : COLUMNS.MOVIMIENTOS_ALMACEN.PRODUCTO_ID];
                 sheet.deleteRow(i + 1);
+                
+                // Audit Log
+                registrarAccion('Almacenes', 'eliminar_movimiento', `Registro de movimiento ${id} eliminado (Producto: ${prodId})`, 'warning', null, data ? data.justificacion : null);
+                
                 return createResponse(true, { message: "Movimiento eliminado" });
             }
         }

@@ -14,7 +14,7 @@ function handleMantencionesPost(action, id, data) {
   switch (action.toLowerCase()) {
     case 'create': return createMantencion(data);
     case 'update': return updateMantencion(id, data);
-    case 'delete': return deleteMantencion(id); // Usually we don't delete, maybe mark as inactive? But for now delete.
+    case 'delete': return deleteMantencion(id, data);
     default: return createErrorResponse('Acción no válida', 400);
   }
 }
@@ -74,9 +74,11 @@ function createMantencion(data) {
     const sheet = getSheet(SHEET_NAMES.MANTENCIONES);
     ensureMantencionesHeaders(sheet);
     
+    // Idempotency check
+    const duplicateResponse = checkIdempotency(sheet, data.clientRequestId, COLUMNS.MANTENCIONES.ID);
     console.log('Creando mantención con datos:', JSON.stringify(data));
     
-    const id = new Date().getTime().toString();
+    const id = data.clientRequestId || generateId('MANT');
     const newRow = Array(12).fill('');
     
     newRow[COLUMNS.MANTENCIONES.ID] = id;
@@ -188,7 +190,7 @@ function updateMantencion(id, data) {
   }
 }
 
-function deleteMantencion(id) {
+function deleteMantencion(id, data) {
   try {
     const sheet = getSheet(SHEET_NAMES.MANTENCIONES);
     const dataValues = sheet.getDataRange().getValues();
@@ -206,7 +208,7 @@ function deleteMantencion(id) {
       sheet.deleteRow(rowIndex);
       
       // Audit Log
-      registrarAccion('Mantenciones', 'eliminar', `Mantención eliminada: ${id} (Vehículo: ${vehiculo})`, 'warning', null);
+      registrarAccion('Mantenciones', 'eliminar', `Mantención eliminada: ${id} (Vehículo: ${vehiculo})`, 'warning', null, data ? data.justificacion : null);
       
       return createResponse(true, null, "Mantención eliminada");
     }

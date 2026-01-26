@@ -3,13 +3,6 @@
  * Helper functions used across all CRUD modules
  */
 
-/**
- * Creates a standardized response object
- * @param {boolean} success - Whether the operation was successful
- * @param {*} data - The data to return (can be object, array, etc.)
- * @param {string} message - Optional error message
- * @returns {Object} Standardized response object
- */
 function createResponse(success, data, message) {
   return {
     success: success,
@@ -18,12 +11,6 @@ function createResponse(success, data, message) {
   };
 }
 
-/**
- * Creates an error response object
- * @param {string} message - Error message
- * @param {number} code - Optional error code
- * @returns {Object} Error response object
- */
 function createErrorResponse(message, code) {
   return {
     success: false,
@@ -34,158 +21,259 @@ function createErrorResponse(message, code) {
 }
 
 /**
- * Gets a sheet by name from the active spreadsheet
- * @param {string} sheetName - Name of the sheet to get
- * @returns {Sheet} The requested sheet
- * @throws {Error} If sheet is not found
+ * Centralized function to get the spreadsheet.
+ * This helps diagnose ReferenceErrors with SPREADSHEETID.
  */
-function getSheet(sheetName) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(sheetName);
-  
-  if (!sheet) {
-    throw new Error(`Hoja "${sheetName}" no encontrada`);
+function getSS() {
+  try {
+    if (typeof SPREADSHEETID === 'undefined') {
+      throw new Error("La constante SPREADSHEETID no está definida en Config.gs o el archivo no se ha cargado.");
+    }
+    return SpreadsheetApp.openById(SPREADSHEETID);
+  } catch (e) {
+    throw new Error("Error accediendo a la base de datos: " + e.toString());
   }
-  
+}
+
+function getSheet(sheetName) {
+  const ss = getSS();
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) throw new Error(`Hoja "${sheetName}" no encontrada`);
   return sheet;
 }
 
-/**
- * Validates required fields in data object
- * @param {Object} data - Data object to validate
- * @param {Array<string>} requiredFields - Array of required field names
- * @throws {Error} If any required field is missing
- */
-function validateRequiredFields(data, requiredFields) {
-  for (const field of requiredFields) {
-    if (!data[field]) {
-      throw new Error(`Campo requerido faltante: ${field}`);
-    }
-  }
-}
-
-/**
- * Generates a unique ID
- * @param {string} prefix - Optional prefix for the ID
- * @returns {string} Unique ID
- */
-function generateId(prefix) {
-  const timestamp = new Date().getTime();
-  const random = Math.floor(Math.random() * 10000);
-  return prefix ? `${prefix}-${timestamp}-${random}` : `${timestamp}-${random}`;
-}
-
-/**
- * Formats a date to dd-mm-aaaa format
- * @param {Date} date - Date to format
- * @returns {string} Date in dd-mm-aaaa format
- */
-/**
- * Formats a date to dd-mm-aaaa format
- * @param {Date} date - Date to format
- * @returns {string} Date in dd-mm-aaaa format
- */
 function formatDate(date) {
-  const d = date ? new Date(date) : new Date();
-  return Utilities.formatDate(d, "America/Santiago", "dd-MM-yyyy");
-}
-
-/**
- * Formats a date to dd-mm-aaaa HH:mm format
- * @param {Date} date - Date to format
- * @returns {string} Date and time
- */
-function formatDateTime(date) {
-  const d = date ? new Date(date) : new Date();
-  return Utilities.formatDate(d, "America/Santiago", "dd-MM-yyyy HH:mm");
-}
-
-/**
- * Safely gets a value from an object with a default fallback
- * @param {Object} obj - Object to get value from
- * @param {string} key - Key to look for
- * @param {*} defaultValue - Default value if key not found
- * @returns {*} The value or default
- */
-function safeGet(obj, key, defaultValue) {
-  return obj && obj[key] !== undefined ? obj[key] : defaultValue;
-}
-
-/**
- * Checks if a value represents a boolean TRUE, supporting Spanish "VERDADERO"
- * @param {*} val - Value to check
- * @returns {boolean}
- */
-function checkBoolean(val) {
-  if (val === true || val === 'true') return true;
-  if (val === false || val === 'false') return false;
-  if (typeof val === 'string') {
-    const s = val.toUpperCase();
-    return s === 'TRUE' || s === 'VERDADERO' || s === 'SÍ' || s === 'SI';
-  }
-  return !!val;
-}
-/**
- * Crea una alerta en el sistema
- * @param {string} tipo - success, info, warning, error
- * @param {string} mensaje - Descripción de la alerta
- * @param {string} modulo - Módulo origen
- * @param {string} accion - Acción realizada
- */
-/**
- * Crea una alerta en el sistema y la registra en la hoja de Auditoría/Alertas
- * @param {string} tipo - success, info, warning, critical
- * @param {string} mensaje - Descripción de la alerta
- * @param {string} modulo - Módulo origen
- * @param {string} accion - Acción realizada
- */
-function createAlerta(tipo, mensaje, modulo, accion) {
+  if (!date) return '';
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return String(date);
   try {
-    Logger.log(`ALERTA: [${tipo}] ${modulo} - ${mensaje}`);
-    // Vinculamos con registrarAccion para persistencia en Google Sheets
-    if (typeof registrarAccion === 'function') {
-      registrarAccion(modulo, accion, mensaje, tipo);
-    } else {
-      Logger.log('ADVERTENCIA: registrarAccion no está disponible. No se pudo persistir la alerta.');
-    }
+    // Explicitly using GMT-3 for Chile Continental
+    return Utilities.formatDate(d, "GMT-3", "dd-MM-yyyy");
   } catch (e) {
-    Logger.log('Error creando alerta: ' + e.toString());
+    return String(date);
   }
 }
 
+function formatDateTime(date) {
+  if (!date) return '';
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return String(date);
+  try {
+    // Explicitly using GMT-3 for Chile Continental to ensure synchronization with user device
+    return Utilities.formatDate(d, "GMT-3", "dd-MM-yyyy HH:mm");
+  } catch (e) {
+    return String(date);
+  }
+}
+
+function generateId(prefix) {
+  // Pattern: PREFIX-TIMESTAMP
+  const timestamp = new Date().getTime();
+  return (prefix || 'ID') + '-' + timestamp;
+}
+
 /**
- * Busca dinámicamente los índices de columnas basados en los nombres de cabecera (Fila 1)
- * @param {Sheet} sheet - La hoja de cálculo
- * @param {Object} columnMap - Mapeo de CLAVE_CONFIG a Array de posibles nombres. Ej: { ID: ['id', 'sku'], NOMBRE: ['nombre', 'name'] }
- * @returns {Object} Objeto con las mismas claves pero valores numéricos (índices 0-based)
+ * Generates a sequential and categorized PRODUCT code
+ * Pattern: PRD-[CAT_PREFIX]-[SEQ] (e.g., PRD-EPP-001)
  */
-function findColumnIndices(sheet, columnMap) {
-  // Leer cabeceras (Fila 1)
-  const lastCol = Math.max(sheet.getLastColumn(), 20); // Leer al menos 20 por si acaso
-  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h).toUpperCase().trim());
-  
-  const result = {};
-  
-  Object.keys(columnMap).forEach(key => {
-    const possibleNames = columnMap[key].map(n => n.toUpperCase().trim());
-    let foundIndex = -1;
+function generateProductCode(categoria) {
+  try {
+    const sheet = getSheet(SHEET_NAMES.PRODUCTOS_ALMACEN);
+    const data = sheet.getDataRange().getValues();
+    const colMap = findColumnIndices(sheet, { ID: ['ID'] });
+    const idIdx = colMap.ID !== -1 ? colMap.ID : 0;
     
-    // Buscar coincidencia exacta o parcial
-    for (const name of possibleNames) {
-      foundIndex = headers.findIndex(h => h === name);
-      if (foundIndex !== -1) break;
-    }
+    const catPrefix = (categoria || 'GEN').substring(0, 3).toUpperCase();
+    const fullPrefix = `PRD-${catPrefix}-`;
     
-    // Si no encuentra exacta, busca includes
-    if (foundIndex === -1) {
-      for (const name of possibleNames) {
-         foundIndex = headers.findIndex(h => h.includes(name));
-         if (foundIndex !== -1) break;
+    let maxSeq = 0;
+    for (let i = 1; i < data.length; i++) {
+      const id = String(data[i][idIdx]);
+      if (id.startsWith(fullPrefix)) {
+        const seqStr = id.replace(fullPrefix, '');
+        const seq = parseInt(seqStr);
+        if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
       }
     }
     
-    result[key] = foundIndex;
-  });
-  
-  return result;
+    const nextSeq = String(maxSeq + 1).padStart(3, '0');
+    return `${fullPrefix}${nextSeq}`;
+  } catch (e) {
+    // Fallback to timestamp if something fails during sequential check
+    return 'PRD-' + new Date().getTime();
+  }
 }
+
+/**
+ * Helpers for human-readable audit logs
+ */
+function fetchProductNamesMap() {
+  try {
+    const sheet = getSheet(SHEET_NAMES.PRODUCTOS_ALMACEN);
+    const data = sheet.getDataRange().getValues();
+    const colMap = findColumnIndices(sheet, { ID: ['ID'], NOMBRE: ['NOMBRE'] });
+    const idIdx = colMap.ID !== -1 ? colMap.ID : 0;
+    const nmIdx = colMap.NOMBRE !== -1 ? colMap.NOMBRE : 2;
+    const map = {};
+    for (let i = 1; i < data.length; i++) {
+      const id = String(data[i][idIdx]).trim();
+      if (id) map[id] = data[i][nmIdx];
+    }
+    return map;
+  } catch(e) { return {}; }
+}
+
+function fetchAlmacenNamesMap() {
+  try {
+    const sheet = getSheet(SHEET_NAMES.ALMACENES);
+    const data = sheet.getDataRange().getValues();
+    const colMap = findColumnIndices(sheet, { ID: ['ID'], NOMBRE: ['NOMBRE'] });
+    const idIdx = colMap.ID !== -1 ? colMap.ID : 0;
+    const nmIdx = colMap.NOMBRE !== -1 ? colMap.NOMBRE : 1;
+    const map = {};
+    for (let i = 1; i < data.length; i++) {
+        const id = String(data[i][idIdx]).trim();
+        if (id) map[id] = data[i][nmIdx];
+    }
+    return map;
+  } catch(e) { return {}; }
+}
+
+/**
+ * Dynamic Column Finder
+ */
+function findColumnIndices(sheet, mapping) {
+  try {
+    const headers = sheet.getRange(1, 1, 1, Math.min(sheet.getLastColumn() || 1, 30)).getValues()[0];
+    const result = {};
+    Object.keys(mapping).forEach(key => {
+      const possibleHeaders = mapping[key].map(h => h.toUpperCase());
+      const foundIdx = headers.findIndex(h => possibleHeaders.includes(String(h).toUpperCase().trim()));
+      result[key] = foundIdx;
+    });
+    return result;
+  } catch (e) {
+    return {};
+  }
+}
+
+/**
+ * Registers a new action in the audit log
+ */
+function registrarAccion(modulo, accion, mensaje, tipo, usuario, justificacion) {
+  try {
+    const ss = getSS();
+    let sheet = ss.getSheetByName(SHEET_NAMES.AUDITORIA);
+    if (!sheet) sheet = ss.getSheetByName(SHEET_NAMES.ALERTA);
+    if (!sheet) return false;
+
+    const colMap = findColumnIndices(sheet, {
+      ID: ['ID', 'CODIGO'],
+      FECHA: ['FECHA', 'TIMESTAMP'],
+      USUARIO: ['USUARIO', 'USER', 'RESPONSABLE'],
+      MODULO: ['MODULO', 'DOMINIO'],
+      ACCION: ['ACCION', 'OPERACION'],
+      MENSAJE: ['MENSAJE', 'DESCRIPCION'],
+      TIPO: ['TIPO', 'LEVEL']
+    });
+
+    const maxIdx = Math.max(...Object.values(colMap), 6);
+    const newRow = Array(maxIdx + 1).fill('');
+    
+    const setVal = (key, fallbackIdx, val) => {
+      const idx = colMap[key] !== -1 ? colMap[key] : fallbackIdx;
+      if (idx !== -1) newRow[idx] = val;
+    };
+
+    setVal('ID', COLUMNS.AUDITORIA.ID, generateId('LOG'));
+    setVal('FECHA', COLUMNS.AUDITORIA.FECHA, formatDateTime(new Date()));
+    setVal('USUARIO', COLUMNS.AUDITORIA.USUARIO, usuario || 'Sistema');
+    setVal('MODULO', COLUMNS.AUDITORIA.MODULO, modulo);
+    setVal('ACCION', COLUMNS.AUDITORIA.ACCION, accion);
+    
+    let fullMsg = mensaje;
+    if (justificacion) fullMsg += ` | Justificación: ${justificacion}`;
+    setVal('MENSAJE', COLUMNS.AUDITORIA.MENSAJE, fullMsg);
+    setVal('TIPO', COLUMNS.AUDITORIA.TIPO, tipo || 'info');
+    
+    sheet.appendRow(newRow);
+    return true;
+  } catch (error) {
+    console.error('Error en registrarAccion:', error);
+    return false;
+  }
+}
+
+const SHEET_NAMES_AL = typeof SHEET_NAMES !== 'undefined' ? SHEET_NAMES : { ALERTA: 'Alerta' };
+
+function createAlerta(arg1, arg2, arg3, arg4) {
+  try {
+    // 1. Normalize Arguments (Handle Object vs Positional)
+    let tipo, mensaje, modulo, accion;
+    
+    if (typeof arg1 === 'object' && arg1 !== null) {
+      // Called with object: { modulo, tipo, descripcion, responsable }
+      tipo = arg1.tipo || 'info';
+      mensaje = arg1.descripcion || arg1.mensaje || '';
+      modulo = arg1.modulo || 'Sistema'; // Default Module
+      accion = arg1.accion || 'registro';
+    } else {
+      // Called with positional: (tipo, mensaje, modulo, accion)
+      tipo = arg1 || 'info';
+      mensaje = arg2 || '';
+      modulo = arg3 || 'Sistema';
+      accion = arg4 || 'registro';
+    }
+
+    // 2. Prepare Data
+    const ss = getSS();
+    const sheetName = SHEET_NAMES.ALERTA || 'Alertas';
+    let sheet = ss.getSheetByName(sheetName);
+
+    // 3. Auto-create sheet if missing
+    if (!sheet) {
+      sheet = ss.insertSheet(sheetName);
+      sheet.appendRow(['ID', 'TIPO', 'MENSAJE', 'MODULO', 'FECHA', 'LEIDA', 'ACCION']);
+      sheet.getRange(1, 1, 1, 7).setFontWeight('bold').setBackground('#f3f4f6');
+    }
+
+    // 4. Append Row
+    const newRow = [
+      'ALR-' + Math.random().toString(36).substr(2, 9).toUpperCase(), // ID
+      tipo,                                                           // TIPO
+      mensaje,                                                        // MENSAJE
+      modulo,                                                         // MODULO
+      formatDateTime(new Date()),                                     // FECHA (Local)
+      'FALSE',                                                        // LEIDA
+      accion                                                          // ACCION
+    ];
+    
+    sheet.appendRow(newRow);
+    Logger.log(`ALERTA REGISTRADA: ${mensaje}`);
+    return true;
+
+  } catch (e) {
+    console.error(`ERROR createAlerta: ${e.toString()}`);
+    return false; // Fail silently to not block main flow
+  }
+}
+
+function checkBoolean(val) {
+  if (val === true || val === 'TRUE' || val === 'true' || val === 'Verdadero' || val === 'VERDADERO' || val === 'SI' || val === 'SÍ' || val === 1 || val === '1') {
+    return true;
+  }
+  return false;
+}
+
+function checkIdempotency(sheet, requestId, idColIdx) {
+  if (!requestId) return null;
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idColIdx]).trim() === String(requestId).trim()) {
+      return createResponse(true, { id: requestId }, "Registro ya existe (idempotencia)");
+    }
+  }
+  return null;
+}
+
+

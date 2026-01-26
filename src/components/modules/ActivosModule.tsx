@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { activosApi, almacenesApi, productosAlmacenApi } from '@/lib/apiService';
+import { activosApi, almacenesApi, productosAlmacenApi, auditoriaApi } from '@/lib/apiService';
+import { useApi } from '@/hooks/useApi';
 import { ActivoForm } from '@/components/forms/ActivoForm';
 import { ActivoFormData } from '@/lib/validations';
 import { Button } from '@/components/ui/button';
@@ -17,9 +18,11 @@ import { Input } from '@/components/ui/input';
 import { AlertTriangle } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { ConfirmDeleteWithJustificationDialog } from '@/components/shared/ConfirmDeleteWithJustificationDialog';
 
 export function ActivosModule() {
-  const { canEdit } = useAuth();
+  const { canEdit, isAdmin, user } = useAuth();
+  const { execute, loading: isActionLoading } = useApi();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingActivo, setEditingActivo] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -88,15 +91,15 @@ export function ActivosModule() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({ id, justification, deleteFromBodega }: { id: string; justification: string; deleteFromBodega: boolean }) => {
       // 1. Delete original asset
-      const response = await activosApi.delete(id);
+      const response = await activosApi.delete(id, { justificacion: justification });
       if (!response.success) {
         throw new Error(response.message || "Error al eliminar el activo");
       }
 
       // 2. Delete from warehouse if requested
-      if (deleteFromWarehouse) {
+      if (deleteFromBodega) {
         try {
           // Fetch all products to find the one linked to this asset
           const productsResponse = await productosAlmacenApi.getAll();
@@ -111,7 +114,7 @@ export function ActivosModule() {
 
           if (linkedProduct) {
             console.log('🗑️ Deleting linked warehouse product:', linkedProduct.id);
-            await productosAlmacenApi.delete(linkedProduct.id);
+            await productosAlmacenApi.delete(linkedProduct.id, { justificacion: `Eliminación automática por activo eliminado: ${justification}` });
             toast({ title: "📦 Producto eliminado", description: `Se eliminó coincidencia en bodega: ${linkedProduct.nombre}` });
           }
         } catch (err) {
@@ -421,85 +424,56 @@ export function ActivosModule() {
       />
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-destructive" />
-              Confirmar Eliminación de Activo
-            </DialogTitle>
-            <DialogDescription>
-              Esta acción eliminará permanentemente el activo del sistema.
-            </DialogDescription>
-          </DialogHeader>
-          {activoToDelete && (
-            <div className="grid gap-3 py-4 bg-secondary/30 p-4 rounded-lg">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <span className="text-muted-foreground">ID:</span>
-                <span className="font-medium font-mono">{activoToDelete.id}</span>
+      <ConfirmDeleteWithJustificationDialog
+        open={isDeleteDialogOpen}
+        onClose={() => {
+          setIsDeleteDialogOpen(false);
+          setActivoToDelete(null);
+        }}
+        onConfirm={async (justification, checkboxesState) => {
+          if (!activoToDelete) return;
+          const deleteFromBodega = checkboxesState?.deleteFromWarehouse ?? false;
 
-                <span className="text-muted-foreground">Nombre:</span>
-                <span className="font-medium">{activoToDelete.nombre}</span>
-
-                <span className="text-muted-foreground">Categoría:</span>
-                <span className="font-medium">{activoToDelete.categoria}</span>
-
-                <span className="text-muted-foreground">Ubicación:</span>
-                <span className="font-medium">{activoToDelete.ubicacion}</span>
-
-                <span className="text-muted-foreground">Responsable:</span>
-                <span className="font-medium">{activoToDelete.responsable}</span>
-              </div>
-            </div>
-          )}
-          <div className="flex items-center space-x-2 py-2">
-            <Checkbox
-              id="deleteFromWarehouse"
-              checked={deleteFromWarehouse}
-              onCheckedChange={(checked) => setDeleteFromWarehouse(checked as boolean)}
-            />
-            <Label
-              htmlFor="deleteFromWarehouse"
-              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-            >
-              Eliminar también de bodega (descontar del inventario)
-            </Label>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
+          // Flow for EVERYONE: Send a deletion request
+          await execute(
+            auditoriaApi.create({
+              modulo: 'Activos',
+              accion: 'solicitud_eliminacion',
+              mensaje: JSON.stringify({
+                entity: 'activos',
+                id: activoToDelete.id,
+                name: activoToDelete.nombre,
+                deleteFromWarehouse: deleteFromBodega,
+                justification: justification
+              }),
+              tipo: 'warning',
+              usuario: user?.email || 'Usuario',
+              justificacion: justification
+            }),
+            {
+              successMessage: "Solicitud de eliminación enviada para aprobación del administrador.",
+              onSuccess: () => {
                 setIsDeleteDialogOpen(false);
                 setActivoToDelete(null);
-                setDeleteFromWarehouse(false);
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                if (activoToDelete) {
-                  deleteMutation.mutate(activoToDelete.id);
-                  setIsDeleteDialogOpen(false);
-                  setActivoToDelete(null);
-                }
-              }}
-              disabled={deleteMutation.isPending}
-            >
-              {deleteMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Eliminando...
-                </>
-              ) : (
-                'Eliminar Activo'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                queryClient.invalidateQueries({ queryKey: ['activity-alerts'] });
+              }
+            }
+          );
+        }}
+        isLoading={deleteMutation.isPending || isActionLoading}
+        title="¿Eliminar Activo?"
+        description="Esta acción eliminará el activo del sistema. Se requiere una justificación."
+        itemName={activoToDelete ? `${activoToDelete.nombre} (${activoToDelete.id})` : undefined}
+        isAdmin={isAdmin}
+        isCritical={true}
+        checkboxes={[
+          {
+            id: "deleteFromWarehouse",
+            label: "Eliminar también de bodega (descontar del inventario)",
+            defaultValue: false
+          },
+        ]}
+      />
 
       {/* Rótulo para Imprimir (oculto) */}
       <div className="hidden">

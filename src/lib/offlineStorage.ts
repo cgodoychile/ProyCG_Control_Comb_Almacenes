@@ -1,3 +1,5 @@
+import { generateUUID } from './uuidPool';
+
 export interface QueuedRequest {
     id: string;
     entity: string;
@@ -25,7 +27,7 @@ export const offlineStorage = {
         const queue = offlineStorage.getQueue();
         const newRequest: QueuedRequest = {
             ...request,
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             timestamp: Date.now(),
         };
         queue.push(newRequest);

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { almacenesApi, productosAlmacenApi, movimientosAlmacenApi, activosApi } from '@/lib/apiService';
+import { almacenesApi, productosAlmacenApi, movimientosAlmacenApi, activosApi, auditoriaApi } from '@/lib/apiService';
 import { AlmacenForm } from '@/components/forms/AlmacenForm';
 import { ProductoForm } from '@/components/forms/ProductoForm';
 import { MovimientoForm } from '@/components/forms/MovimientoForm';
@@ -26,7 +26,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { KPICard } from '@/components/dashboard/KPICard';
-import { cn } from '@/lib/utils';
+import { cn, getLocalDate } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { speakSuccess } from '@/utils/voiceNotification';
@@ -38,6 +38,7 @@ import {
 import { useReactToPrint } from 'react-to-print';
 import { ProductLabel } from '@/components/assets/ProductLabel';
 import { BarcodeScanner } from '@/components/shared/BarcodeScanner';
+import { useApi } from '@/hooks/useApi';
 
 const COLORS = ['#FF8042', '#FFBB28', '#00C49F', '#0088FE', '#8884d8'];
 
@@ -47,11 +48,13 @@ interface AlmacenesModuleProps {
 
 import { ProductTrackingDialog } from './ProductTrackingDialog';
 import { GlobalProductSearchDialog } from './GlobalProductSearchDialog';
+import { ConfirmDeleteWithJustificationDialog } from '@/components/shared/ConfirmDeleteWithJustificationDialog';
 
 export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
     const { toast } = useToast();
-    const { canEdit, user } = useAuth();
+    const { canEdit, isAdmin, user } = useAuth();
     const queryClient = useQueryClient();
+    const { execute, loading: isActionLoading } = useApi();
 
     const [selectedWarehouse, setSelectedWarehouse] = useState<string | null>(null);
     const [isAlmacenFormOpen, setIsAlmacenFormOpen] = useState(false);
@@ -70,6 +73,8 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
     const [printingProducto, setPrintingProducto] = useState<any>(null);
     const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
     const [movimientoInitialData, setMovimientoInitialData] = useState<any>(null);
+    const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+    const [itemToDelete, setItemToDelete] = useState<{ id: string, type: 'almacen' | 'producto' | 'movimiento', name?: string } | null>(null);
     const labelRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -162,8 +167,8 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
     });
 
     const deleteAlmacenMutation = useMutation({
-        mutationFn: async (id: string) => {
-            const response = await almacenesApi.delete(id);
+        mutationFn: async ({ id, justification }: { id: string, justification: string }) => {
+            const response = await almacenesApi.delete(id, { justificacion: justification });
             if (!response.success) throw new Error(response.message || "Error al eliminar almacén");
             return response;
         },
@@ -171,6 +176,8 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
             queryClient.invalidateQueries({ queryKey: ['almacenes'] });
             toast({ title: "✅ Almacén eliminado" });
             setSelectedWarehouse(null);
+            setIsDeleteConfirmOpen(false);
+            setItemToDelete(null);
         },
         onError: (error: any) => {
             toast({ variant: "destructive", title: "❌ Error", description: error.message });
@@ -190,7 +197,7 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                     categoria: data.categoria,
                     ubicacion: warehouseName,
                     estado: 'operativo',
-                    fechaAdquisicion: new Date().toISOString().split('T')[0],
+                    fechaAdquisicion: getLocalDate(),
                     valorInicial: data.valorUnitario,
                     responsable: user?.name || 'Sistema'
                 };
@@ -231,11 +238,11 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
     });
 
     const deleteProductoMutation = useMutation({
-        mutationFn: async (id: string) => {
+        mutationFn: async ({ id, justification }: { id: string, justification: string }) => {
             // Find the product to check if it's an activo
             const producto = productos.find((p: any) => p.id === id);
 
-            const response = await productosAlmacenApi.delete(id);
+            const response = await productosAlmacenApi.delete(id, { justificacion: justification });
             if (!response.success) throw new Error(response.message || "Error al eliminar");
 
             // If the product was marked as an activo, delete it from Activos module too
@@ -249,7 +256,7 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                             a.categoria === producto.categoria
                         );
                         if (activo) {
-                            await activosApi.delete(activo.id);
+                            await activosApi.delete(activo.id, { justificacion: `Eliminación automática por producto archivado: ${justification}` });
                             console.log('✅ Activo eliminado:', activo.id);
                         }
                     }
@@ -266,11 +273,21 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
             queryClient.invalidateQueries({ queryKey: ['almacenes'] });
             queryClient.invalidateQueries({ queryKey: ['activos'] }); // Invalidate activos too
             toast({ title: "✅ Producto eliminado", description: "El producto y su activo asociado han sido eliminados." });
+            setIsDeleteConfirmOpen(false);
+            setItemToDelete(null);
+        },
+        onError: (error: any) => {
+            toast({ variant: "destructive", title: "❌ Error", description: error.message });
+            setIsDeleteConfirmOpen(false);
         }
     });
 
     const createMovimientoMutation = useMutation({
-        mutationFn: movimientosAlmacenApi.create,
+        mutationFn: async (data: any) => {
+            const response = await movimientosAlmacenApi.create(data);
+            if (!response.success) throw new Error(response.message || "Error al registrar movimiento");
+            return response;
+        },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['productos'] });
             queryClient.invalidateQueries({ queryKey: ['movimientos'] });
@@ -319,6 +336,35 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
     const totalAlertas = almacenes.reduce((sum: number, a: any) => sum + (a.alertasStock || 0), 0);
     const totalInventoryValue = almacenes.reduce((sum: number, a: any) => sum + (a.valorInventario || 0), 0);
 
+    const handleConfirmDelete = async (justification: string) => {
+        if (!itemToDelete) return;
+
+        // Flow for EVERYONE: Send a deletion request
+        await execute(
+            auditoriaApi.create({
+                modulo: 'Almacenes',
+                accion: 'solicitud_eliminacion',
+                mensaje: JSON.stringify({
+                    entity: itemToDelete.type === 'almacen' ? 'almacenes' : 'productos',
+                    id: itemToDelete.id,
+                    name: itemToDelete.name || itemToDelete.id,
+                    justification: justification
+                }),
+                tipo: 'warning',
+                usuario: user?.email || 'Usuario',
+                justificacion: justification
+            }),
+            {
+                successMessage: "Solicitud de eliminación enviada para aprobación del administrador.",
+                onSuccess: () => {
+                    setIsDeleteConfirmOpen(false);
+                    setItemToDelete(null);
+                    queryClient.invalidateQueries({ queryKey: ['activity-alerts'] });
+                }
+            }
+        );
+    };
+
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(amount);
     };
@@ -362,8 +408,8 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
             {/* Header */}
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
                 <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-foreground">Almacenes e Inventario</h2>
-                    <p className="text-muted-foreground">Control de existencias y movimientos de insumos</p>
+                    <h2 className="text-xl font-bold tracking-tight text-foreground">Almacenes e Inventario</h2>
+                    <p className="text-xs text-muted-foreground">Gestión de bodegas e insumos</p>
                 </div>
                 <div className="flex gap-2">
                     <Button
@@ -415,7 +461,7 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                     <ResponsiveContainer width="100%" height="90%">
                         <BarChart data={chartDataAlmacen}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#333" />
-                            <XAxis dataKey="name" fontSize={10} tick={{ fill: '#888' }} axisLine={false} tickLine={false} />
+                            <XAxis dataKey="name" fontSize={9} tick={{ fill: '#888' }} axisLine={false} tickLine={false} interval={0} />
                             <YAxis fontSize={10} tick={{ fill: '#888' }} axisLine={false} tickLine={false} tickFormatter={(value) => `$${value / 1000}k`} />
                             <Tooltip
                                 cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
@@ -438,8 +484,8 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                                 data={chartDataAlmacen}
                                 cx="50%"
                                 cy="50%"
-                                innerRadius={60}
-                                outerRadius={80}
+                                innerRadius={55}
+                                outerRadius={75}
                                 paddingAngle={5}
                                 dataKey="value"
                                 minAngle={15}
@@ -450,8 +496,14 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                             </Pie>
                             <Tooltip
                                 formatter={(value: number) => [formatCurrency(value), 'Valor']}
-                                contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', borderRadius: '8px', fontSize: '12px', color: '#f3f4f6' }}
+                                contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', borderRadius: '8px', fontSize: '11px', color: '#f3f4f6' }}
                                 itemStyle={{ color: '#f3f4f6' }}
+                            />
+                            <Legend
+                                verticalAlign="bottom"
+                                align="center"
+                                iconType="circle"
+                                wrapperStyle={{ fontSize: '10px', paddingTop: '10px' }}
                             />
                         </PieChart>
                     </ResponsiveContainer>
@@ -752,7 +804,17 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                                                             <Printer className="w-4 h-4" />
                                                         </Button>
                                                         <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => { setEditingProducto(producto); setIsProductoFormOpen(true); }}><Edit className="w-4 h-4" /></Button>
-                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => { if (confirm('¿Eliminar producto?')) deleteProductoMutation.mutate(producto.id); }}><Trash2 className="w-4 h-4" /></Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8 text-destructive"
+                                                            onClick={() => {
+                                                                setItemToDelete({ id: producto.id, type: 'producto', name: producto.nombre });
+                                                                setIsDeleteConfirmOpen(true);
+                                                            }}
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </Button>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -865,7 +927,7 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
             )}
 
             {/* Product Selection for Entry/Exit/Transfer */}
-            {isMovimientoFormOpen && selectedWarehouse && (
+            {isMovimientoFormOpen && selectedWarehouse && !selectedProducto && (
                 <Dialog open={isMovimientoFormOpen} onOpenChange={setIsMovimientoFormOpen}>
                     <DialogContent className="sm:max-w-[500px]">
                         <DialogHeader>
@@ -936,13 +998,18 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
             {selectedWarehouse && selectedProducto && (
                 <MovimientoForm
                     open={isMovimientoFormOpen}
-                    onClose={() => setIsMovimientoFormOpen(false)}
+                    onClose={() => {
+                        setIsMovimientoFormOpen(false);
+                        setSelectedProducto(null);
+                        setMovimientoInitialData(null);
+                    }}
                     onSubmit={(data) => createMovimientoMutation.mutate(data)}
                     almacenId={selectedWarehouse}
                     productoId={selectedProducto}
                     tipo={movimientoTipo}
                     almacenes={almacenes}
                     isRetornable={productos.find((p: any) => p.id === selectedProducto)?.esRetornable}
+                    initialData={movimientoInitialData}
                 />
             )}
             {/* Warehouse Selection for Excel */}
@@ -988,6 +1055,24 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                 open={isScannerOpen}
                 onClose={() => setIsScannerOpen(false)}
                 onScan={handleScanCode}
+            />
+
+            {/* Deletion Justification Dialog */}
+            <ConfirmDeleteWithJustificationDialog
+                open={isDeleteConfirmOpen}
+                onClose={() => {
+                    setIsDeleteConfirmOpen(false);
+                    setItemToDelete(null);
+                }}
+                onConfirm={handleConfirmDelete}
+                isLoading={deleteAlmacenMutation.isPending || deleteProductoMutation.isPending || isActionLoading}
+                title={itemToDelete?.type === 'almacen' ? "¿Eliminar Almacén?" : "¿Eliminar Producto?"}
+                description={itemToDelete?.type === 'almacen'
+                    ? "Esta acción eliminará el almacén y podría afectar los registros de productos asociados. Se requiere una justificación."
+                    : "Esta acción eliminará el producto y su activo asociado (si existe). Se requiere una justificación."}
+                itemName={itemToDelete?.name}
+                isAdmin={isAdmin}
+                isCritical={true}
             />
 
             {/* Rótulo para Imprimir (oculto) */}

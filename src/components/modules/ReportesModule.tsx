@@ -681,6 +681,7 @@ export function ReportesModule() {
                                                     outerRadius={80}
                                                     paddingAngle={5}
                                                     dataKey="value"
+                                                    label={({ name, value }) => `${name}: ${value}`}
                                                 >
                                                     {stats.chartDataByStatus.map((entry: any, index: number) => (
                                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />

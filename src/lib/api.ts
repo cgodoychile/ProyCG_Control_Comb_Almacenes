@@ -1,6 +1,6 @@
 export const API_CONFIG = {
   // Use environment variable or fallback to production URL
-  BASE_URL: import.meta.env.VITE_API_URL || 'https://script.google.com/macros/s/AKfycbwdGCpai8v404jCZK0VLm-tmiMNGd2uSbhFjaGMZqYMlDJkHyF4BjZN9f1RohRSUykr_A/exec',
+  BASE_URL: import.meta.env.VITE_API_URL || 'https://script.google.com/macros/s/AKfycbxmZOYOHVY8v1-ohm4tU_oVQnQ8UZJ6Mo3F2aZt20dJ13O7g_CJY9eWVfsxS7dYlyKH/exec',
   TIMEOUT: 30000, // 30 seconds
 };
 
@@ -29,6 +29,7 @@ export const buildApiUrl = (entity: string, action: string, id?: string, extraPa
   return url.toString();
 };
 
+import { generateUUID } from './uuidPool';
 import { offlineStorage } from './offlineStorage';
 
 export const apiFetch = async <T>(
@@ -39,12 +40,18 @@ export const apiFetch = async <T>(
     method?: 'GET' | 'POST';
     body?: any;
     params?: Record<string, string>;
+    isSync?: boolean;
   }
 ): Promise<ApiResponse<T>> => {
-  const { id, method = 'GET', body, params } = options || {};
+  const { id, method = 'GET', body, params, isSync = false } = options || {};
 
   // Check connectivity
   if (!navigator.onLine && method === 'POST') {
+    if (isSync) {
+      // If we are already in a sync process and somehow triggered this without connection,
+      // don't re-queue it again to avoid duplication/loops.
+      throw new Error('Sin conexión durante la sincronización');
+    }
     console.warn(`📴 [API] Offline detected. Queuing ${entity}/${action}`);
     offlineStorage.enqueue({ entity, action, method, body, params });
 
@@ -67,12 +74,16 @@ export const apiFetch = async <T>(
 
     // Only add headers for POST requests to avoid CORS preflight
     if (method === 'POST' && body) {
+      // Create a stable request ID for idempotency
+      const requestId = body.clientRequestId || generateUUID();
+      const bodyWithId = { ...body, clientRequestId: requestId };
+
       // Use text/plain to avoid CORS preflight
       fetchOptions.headers = {
         'Content-Type': 'text/plain',
       };
-      fetchOptions.body = JSON.stringify(body);
-      console.log('📤 [API] Request body:', body);
+      fetchOptions.body = JSON.stringify(bodyWithId);
+      console.log(`📤 [API] Request body (ID: ${requestId}):`, bodyWithId);
     }
 
     const response = await fetch(url, fetchOptions);
@@ -87,17 +98,39 @@ export const apiFetch = async <T>(
 
     if (!data.success) {
       console.error('❌ [API] Backend Error:', data.message);
-      throw new Error(data.message || 'Error en la operación del servidor');
+      // Return the full data object so the caller can see the statusCode from the backend
+      return {
+        ...data,
+        statusCode: data.statusCode || 400
+      };
     }
 
-    return data;
+    return {
+      ...data,
+      statusCode: 200
+    };
   } catch (error) {
     console.error('API Error:', error);
 
     // If fetch failed due to network, queue it
     if (method === 'POST') {
+      if (isSync) {
+        throw error; // Re-throw to be handled by SyncManager loop
+      }
       console.warn('🔄 [API] Fetch failed, queuing request...');
-      offlineStorage.enqueue({ entity, action, method, body, params });
+
+      // Extract or generate ID for the queue
+      const queuedBody = body || {};
+      const requestId = queuedBody.clientRequestId || generateUUID();
+
+      offlineStorage.enqueue({
+        entity,
+        action,
+        method,
+        body: { ...queuedBody, clientRequestId: requestId },
+        params
+      });
+
       return {
         success: true,
         data: null as any,
@@ -114,4 +147,3 @@ export const apiFetch = async <T>(
     };
   }
 };
-

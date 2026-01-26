@@ -57,7 +57,18 @@ export function LoginPage() {
                         <img src={enelLogo} alt="Enel" className="h-full object-contain" />
                     </div>
                     <div className="flex flex-col items-center">
-                        <div className="w-16 h-16 bg-gradient-to-br from-primary/20 to-accent/20 rounded-full flex items-center justify-center mb-4 text-primary shadow-lg overflow-hidden p-0 border-2 border-primary/30">
+                        <style>
+                            {`
+                            @keyframes neon-pulse {
+                                0%, 100% { box-shadow: 0 0 5px #007bff, 0 0 10px #007bff, 0 0 20px #007bff; border-color: #007bff; }
+                                50% { box-shadow: 0 0 20px #007bff, 0 0 40px #007bff, 0 0 60px #007bff; border-color: #33a1ff; }
+                            }
+                            .neon-logo {
+                                animation: neon-pulse 2s infinite ease-in-out;
+                            }
+                            `}
+                        </style>
+                        <div className="w-32 h-32 bg-white rounded-full flex items-center justify-center mb-6 text-primary shadow-2xl overflow-hidden p-1 border-4 border-primary neon-logo relative z-20">
                             <img src={profilePhoto} alt="Profile" className="w-full h-full object-cover rounded-full" />
                         </div>
                         <div className="text-center">

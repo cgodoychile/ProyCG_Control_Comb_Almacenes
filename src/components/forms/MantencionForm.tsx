@@ -17,6 +17,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Info } from 'lucide-react';
 import { vehiculosApi } from '@/lib/apiService';
 import { useQuery } from '@tanstack/react-query';
+import { getLocalDate } from '@/lib/utils';
 
 // Validation Schema
 const mantencionSchema = z.object({
@@ -29,7 +30,7 @@ const mantencionSchema = z.object({
     taller: z.string().optional(),
     costo: z.number().min(0).optional(),
     observaciones: z.string().optional(),
-    estado: z.enum(['Pendiente', 'Completada', 'Agendada']),
+    estado: z.enum(['En Proceso', 'Completada', 'Agendada']),
     responsable: z.string().min(1, 'El responsable es requerido'),
 });
 
@@ -59,9 +60,9 @@ export function MantencionForm({
         reset,
     } = useForm<MantencionFormData>({
         resolver: zodResolver(mantencionSchema),
-        defaultValues: initialData || {
-            fechaIngreso: new Date().toISOString().split('T')[0],
-            estado: 'Completada',
+        defaultValues: {
+            fechaIngreso: initialData?.fechaIngreso || getLocalDate(),
+            vehiculo: initialData?.vehiculo || '',
             responsable: 'Admin',
             kmActual: 0,
         },
@@ -78,7 +79,7 @@ export function MantencionForm({
     useEffect(() => {
         if (open) {
             reset({
-                fechaIngreso: new Date().toISOString().split('T')[0],
+                fechaIngreso: getLocalDate(),
                 estado: 'Completada',
                 responsable: 'Admin',
                 kmActual: 0,
@@ -148,7 +149,7 @@ export function MantencionForm({
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="Completada">Completada</SelectItem>
-                                <SelectItem value="Pendiente">Pendiente</SelectItem>
+                                <SelectItem value="En Proceso">En Proceso</SelectItem>
                                 <SelectItem value="Agendada">Agendada</SelectItem>
                             </SelectContent>
                         </Select>

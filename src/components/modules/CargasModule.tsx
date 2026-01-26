@@ -18,6 +18,7 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
+import { ConfirmDeleteWithJustificationDialog } from '@/components/shared/ConfirmDeleteWithJustificationDialog';
 
 export function CargasModule() {
   const { canEdit } = useAuth();
@@ -108,10 +109,10 @@ export function CargasModule() {
 
   // Delete mutation
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({ id, justification }: { id: string, justification: string }) => {
       // Find the load to know how many liters to subtract
       const carga = cargasData.find(c => c.id === id);
-      const result = await cargasApi.delete(id);
+      const result = await cargasApi.delete(id, { justificacion: justification });
 
       if (carga && carga.tipo !== 'programada') {
         const estanque = estanques.find(e => e.nombre === carga.estanque);
@@ -162,10 +163,10 @@ export function CargasModule() {
     setIsDeleteDialogOpen(true);
   };
 
-  const confirmDelete = async () => {
+  const confirmDelete = async (justification: string) => {
     if (cargaToDelete) {
       console.log('Confirmando eliminación de carga ID:', cargaToDelete.id);
-      await deleteMutation.mutateAsync(cargaToDelete.id);
+      await deleteMutation.mutateAsync({ id: cargaToDelete.id, justification });
       setIsDeleteDialogOpen(false);
       setCargaToDelete(null);
     }
@@ -383,64 +384,18 @@ export function CargasModule() {
       />
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-destructive" />
-              Confirmar Eliminación de Carga
-            </DialogTitle>
-            <DialogDescription>
-              Esta acción eliminará la carga y ajustará el stock del estanque restando los litros cargados.
-            </DialogDescription>
-          </DialogHeader>
-          {cargaToDelete && (
-            <div className="grid gap-3 py-4 bg-secondary/30 p-4 rounded-lg">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <span className="text-muted-foreground">Fecha:</span>
-                <span className="font-medium">{cargaToDelete.fecha ? new Date(cargaToDelete.fecha).toLocaleDateString('es-CL') : '-'}</span>
-
-                <span className="text-muted-foreground">Estanque:</span>
-                <span className="font-medium">{cargaToDelete.estanque}</span>
-
-                <span className="text-muted-foreground">Litros:</span>
-                <span className="font-medium text-destructive">-{cargaToDelete.litros?.toLocaleString()} L</span>
-
-                <span className="text-muted-foreground">Proveedor:</span>
-                <span className="font-medium">{cargaToDelete.proveedor}</span>
-
-                <span className="text-muted-foreground">N° Guía:</span>
-                <span className="font-medium">{cargaToDelete.numeroGuia || '-'}</span>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsDeleteDialogOpen(false);
-                setCargaToDelete(null);
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={confirmDelete}
-              disabled={deleteMutation.isPending}
-            >
-              {deleteMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Eliminando...
-                </>
-              ) : (
-                'Eliminar Carga'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDeleteWithJustificationDialog
+        open={isDeleteDialogOpen}
+        onClose={() => {
+          setIsDeleteDialogOpen(false);
+          setCargaToDelete(null);
+        }}
+        onConfirm={confirmDelete}
+        isLoading={deleteMutation.isPending}
+        title="¿Eliminar Carga?"
+        description="Esta acción eliminará la carga y ajustará el stock del estanque restando los litros cargados. Se requiere una justificación."
+        itemName={cargaToDelete ? `${cargaToDelete.fecha} - ${cargaToDelete.litros}L` : undefined}
+      />
     </div>
 
   );

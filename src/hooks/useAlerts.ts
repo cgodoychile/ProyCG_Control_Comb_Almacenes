@@ -11,6 +11,9 @@ export interface Alerta {
     tipo: 'critical' | 'warning' | 'info' | 'success';
     fecha: string;
     origen: string;
+    accion?: string;
+    action?: string;
+    data?: any;
 }
 
 export function useAlerts() {
@@ -77,14 +80,31 @@ export function useAlerts() {
                 // Keep default date if parsing fails
             }
 
-            const accion = (a as any).accion || a.accionRealizada || 'Actividad';
+            const accion = (a as any).accion || (a as any).accionRealizada || 'Actividad';
+            let mensaje = a.mensaje;
+            let metadata = null;
+
+            // Try to parse JSON message for special actions
+            if (mensaje && mensaje.startsWith('{')) {
+                try {
+                    metadata = JSON.parse(mensaje);
+                    if (metadata.name) {
+                        mensaje = `Solicitud para eliminar: ${metadata.name}${metadata.justification ? ` - Motivo: ${metadata.justification}` : ''}`;
+                    }
+                } catch (e) {
+                    // Not valid JSON or different format, keep original
+                }
+            }
+
             generatedAlerts.push({
                 id: a.id,
-                titulo: `${accion.charAt(0).toUpperCase() + accion.slice(1)} en ${a.modulo}`,
-                mensaje: a.mensaje,
+                titulo: accion === 'solicitud_eliminacion' ? '🔒 Solicitud de Eliminación' : `${accion.charAt(0).toUpperCase() + accion.slice(1)} en ${a.modulo}`,
+                mensaje: mensaje,
                 tipo: a.tipo || 'info',
                 fecha: displayDate,
-                origen: a.modulo || 'Sistema'
+                origen: a.modulo || 'Sistema',
+                accion: accion,
+                data: metadata
             });
         });
 

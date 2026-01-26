@@ -11,6 +11,31 @@ function handleAuditoriaGet(action) {
   }
 }
 
+function handleAuditoriaPost(action, id, data) {
+  switch (action.toLowerCase()) {
+    case 'create': return createAuditEntry(data);
+    case 'approveanddelete': return approveAndDelete(id, data);
+    default: return createErrorResponse('Acción no válida', 400);
+  }
+}
+
+function createAuditEntry(data) {
+  const success = registrarAccion(
+    data.modulo,
+    data.accion,
+    data.mensaje,
+    data.tipo,
+    data.usuario,
+    data.justificacion,
+    data.itemName || null // Optional name to avoid raw ID in log
+  );
+  if (success) {
+    return createResponse(true, null, "Log registrado exitosamente");
+  } else {
+    return createErrorResponse("Error al registrar el log");
+  }
+}
+
 /**
  * Creates the Auditoria sheet if it doesn't exist
  */
@@ -47,69 +72,7 @@ function setupAuditoria() {
   }
 }
 
-/**
- * Registers a new action in the audit log or alerts system
- * @param {string} modulo - Module where the action occurred
- * @param {string} accion - Action performed (crear, actualizar, eliminar, etc.)
- * @param {string} mensaje - Detailed description
- * @param {string} tipo - type (info, warning, critical, success)
- * @param {string} usuario - User who performed the action (defaults to current user)
- */
-function registrarAccion(modulo, accion, mensaje, tipo, usuario) {
-  try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    let sheet = ss.getSheetByName(SHEET_NAMES.AUDITORIA);
-    
-    // Fallback check
-    if (!sheet) {
-        sheet = ss.getSheetByName('Alertas');
-    }
-
-    // Auto-create if missing during registration to prevent crashes
-    if (!sheet) {
-        setupAuditoria();
-        sheet = ss.getSheetByName(SHEET_NAMES.AUDITORIA) || ss.getSheetByName('Alertas');
-    }
-    
-    if (!sheet) {
-        Logger.log('Error: No se encontró la hoja de Auditoría o Alertas.');
-        return false;
-    }
-
-    // Dynamic Column Mapping
-    const colMap = findColumnIndices(sheet, {
-        ID: ['ID', 'CODIGO'],
-        FECHA: ['FECHA', 'TIMESTAMP', 'FECHA'],
-        USUARIO: ['USUARIO', 'USER', 'RESPONSABLE'],
-        MODULO: ['MODULO', 'DOMINIO'],
-        ACCION: ['ACCION', 'OPERACION'],
-        MENSAJE: ['MENSAJE', 'DESCRIPCION', 'DETALLE'],
-        TIPO: ['TIPO', 'LEVEL', 'CATEGORIA']
-    });
-
-    const maxIdx = Math.max(...Object.values(colMap), 6);
-    const newRow = Array(maxIdx + 1).fill('');
-    
-    const setVal = (key, fallbackIdx, val) => {
-        const idx = colMap[key] !== -1 ? colMap[key] : fallbackIdx;
-        if (idx !== -1) newRow[idx] = val;
-    };
-
-    setVal('ID', COLUMNS.AUDITORIA.ID, generateId('LOG'));
-    setVal('FECHA', COLUMNS.AUDITORIA.FECHA, formatDateTime(new Date()));
-    setVal('USUARIO', COLUMNS.AUDITORIA.USUARIO, usuario || 'Sistema');
-    setVal('MODULO', COLUMNS.AUDITORIA.MODULO, modulo);
-    setVal('ACCION', COLUMNS.AUDITORIA.ACCION, accion);
-    setVal('MENSAJE', COLUMNS.AUDITORIA.MENSAJE, mensaje);
-    setVal('TIPO', COLUMNS.AUDITORIA.TIPO, tipo || 'info');
-    
-    sheet.appendRow(newRow);
-    return true;
-  } catch (error) {
-    Logger.log('Error en registrarAccion: ' + error.toString());
-    return false;
-  }
-}
+// End of helper functions - using centralized Utils.gs
 
 /**
  * Gets all audit logs / alerts
@@ -117,10 +80,16 @@ function registrarAccion(modulo, accion, mensaje, tipo, usuario) {
  */
 function getAllAuditoria() {
   try {
-    let sheet = ss_safe_getSheet(SHEET_NAMES.AUDITORIA);
-    if (!sheet) sheet = ss_safe_getSheet('Alertas');
-
-    if (!sheet) return createResponse(true, []);
+    let sheet;
+    try {
+      sheet = getSheet(SHEET_NAMES.AUDITORIA);
+    } catch (e) {
+      try {
+        sheet = getSheet('Alertas');
+      } catch (e2) {
+        return createResponse(true, []);
+      }
+    }
 
     const data = sheet.getDataRange().getValues();
     if (data.length <= 1) return createResponse(true, []);
@@ -171,13 +140,66 @@ function getAllAuditoria() {
 }
 
 /**
- * Safe version of getSheet that doesn't throw
+ * Approves a deletion request and executes the ACTUAL deletion from the target sheet.
+ * @param {string} alertId The ID of the alert to mark as processed
+ * @param {Object} data Must contain { targetEntity, targetId, restoreStock, justification }
  */
-function ss_safe_getSheet(name) {
-    try {
-        const ss = SpreadsheetApp.getActiveSpreadsheet();
-        return ss.getSheetByName(name);
-    } catch (e) {
-        return null;
+function approveAndDelete(alertId, data) {
+  try {
+    if (!alertId) throw new Error('ID de alerta es requerido');
+    if (!data.targetEntity || !data.targetId) throw new Error('Entidad y ID objetivo son requeridos');
+
+    let result;
+    // Execute the actual deletion based on entity
+    switch (data.targetEntity.toLowerCase()) {
+      case 'consumos': result = deleteConsumo(data.targetId, { restoreStock: data.restoreStock === true }); break;
+      case 'vehiculos': result = deleteVehiculo(data.targetId); break;
+      case 'estanques': result = deleteEstanque(data.targetId); break;
+      case 'activos': result = deleteActivo(data.targetId, { deleteFromWarehouse: data.deleteFromWarehouse === true }); break;
+      case 'personas': result = deletePersona(data.targetId); break;
+      case 'usuarios': result = deleteUsuario(data.targetId); break;
+      case 'mantenciones': result = deleteMantencion(data.targetId); break;
+      case 'almacenes': result = deleteAlmacen(data.targetId); break;
+      default: throw new Error('Entidad no soportada para eliminación aprobada: ' + data.targetEntity);
     }
+
+    if (result.success) {
+      // Mark alert as "LEIDA" (Read) or DELETE it
+      const ss = getSS();
+      const sheet = ss.getSheetByName(SHEET_NAMES.ALERTA);
+      if (sheet) {
+        const rows = sheet.getDataRange().getValues();
+        const colMap = findColumnIndices(sheet, { ID: ['ID', 'CODIGO'] });
+        const idIdx = colMap.ID !== -1 ? colMap.ID : COLUMNS.ALERTA.ID;
+        
+        for (let i = 1; i < rows.length; i++) {
+          if (rows[i][idIdx] == alertId) {
+             sheet.getRange(i + 1, COLUMNS.ALERTA.LEIDA + 1).setValue('TRUE');
+             sheet.getRange(i + 1, COLUMNS.ALERTA.ACCION + 1).setValue('aprobado_y_eliminado');
+             break;
+          }
+        }
+      }
+      }
+
+      // Final Audit of the APPROVAL
+      const targetName = data.itemName || data.targetId;
+      registrarAccion(
+          data.targetEntity, 
+          'aprobacion_eliminacion', 
+          `ELIMINACIÓN APROBADA: ${targetName} (${data.targetId})`, 
+          'success', 
+          'Administrador', 
+          data.justificacion
+      );
+      
+      return createResponse(true, null, "Registro eliminado y alerta procesada");
+    } else {
+      return result;
+    }
+  } catch (error) {
+    return createErrorResponse('Error al aprobar eliminación: ' + error.toString());
+  }
 }
+
+// End of AuditoriaCRUD.gs

@@ -1,7 +1,3 @@
-/**
- * USUARIOS CRUD (Admin Only)
- */
-
 function handleUsuariosGet(action) {
   switch (action.toLowerCase()) {
     case 'getall': return getAllUsuarios();
@@ -13,90 +9,94 @@ function handleUsuariosPost(action, id, data) {
   switch (action.toLowerCase()) {
     case 'create': return createUsuario(data);
     case 'update': return updateUsuario(id, data);
-    case 'delete': return deleteUsuario(id);
+    case 'delete': return deleteUsuario(id, data);
     default: return createErrorResponse('Acción no válida', 400);
   }
 }
 
-/**
- * Get all users (Masking passwords)
- */
 function getAllUsuarios() {
-  const sheet = getSheet(SHEET_NAMES.USUARIOS);
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const rows = data.slice(1);
+  try {
+    const sheet = getSheet(SHEET_NAMES.USUARIOS);
+    const data = sheet.getDataRange().getValues();
+    
+    if (data.length <= 1) return createResponse(true, []);
+    
+    const usuarios = [];
+    for (let i = 1; i < data.length; i++) {
+        const row = data[i];
+        if (!row[COLUMNS.USUARIOS.EMAIL]) continue;
 
-  const usuarios = rows.map((row, index) => {
-    return {
-      id: row[COLUMNS.USUARIOS.EMAIL], // Use Email as ID
-      email: row[COLUMNS.USUARIOS.EMAIL],
-      password: "", // Security: Do not expose password
-      role: row[COLUMNS.USUARIOS.ROL],
-      name: row[COLUMNS.USUARIOS.NOMBRE]
-    };
-  });
-
-  return createResponse(true, usuarios);
+        usuarios.push({
+            id: row[COLUMNS.USUARIOS.EMAIL], // Usar email como ID unico
+            email: row[COLUMNS.USUARIOS.EMAIL],
+            nombre: row[COLUMNS.USUARIOS.NOMBRE],
+            rol: row[COLUMNS.USUARIOS.ROL],
+            password: row[COLUMNS.USUARIOS.PASSWORD]
+        });
+    }
+    return createResponse(true, usuarios);
+  } catch (error) {
+    return createResponse(false, null, error.toString());
+  }
 }
 
-/**
- * Create a new user
- */
 function createUsuario(data) {
-  const sheet = getSheet(SHEET_NAMES.USUARIOS);
-  const rows = sheet.getDataRange().getValues();
-  
-  // Check duplicates
-  for(let i=1; i<rows.length; i++) {
-    if(rows[i][COLUMNS.USUARIOS.EMAIL] === data.email) {
-      return createErrorResponse("El usuario ya existe.");
-    }
+  try {
+    const sheet = getSheet(SHEET_NAMES.USUARIOS);
+    const newRow = Array(4).fill('');
+    newRow[COLUMNS.USUARIOS.EMAIL] = data.email;
+    newRow[COLUMNS.USUARIOS.PASSWORD] = data.password;
+    newRow[COLUMNS.USUARIOS.ROL] = data.rol || 'user';
+    newRow[COLUMNS.USUARIOS.NOMBRE] = data.nombre;
+    
+    sheet.appendRow(newRow);
+    return createResponse(true, data, "Usuario creado exitosamente");
+  } catch (error) {
+    return createResponse(false, null, error.toString());
   }
-
-  const newRow = [];
-  newRow[COLUMNS.USUARIOS.EMAIL] = data.email;
-  newRow[COLUMNS.USUARIOS.PASSWORD] = data.password; // Plain text as per current simplified auth
-  newRow[COLUMNS.USUARIOS.ROL] = data.role;
-  newRow[COLUMNS.USUARIOS.NOMBRE] = data.name;
-
-  sheet.appendRow(newRow);
-  return createResponse(true, { id: data.email, ...data }, "Usuario creado exitosamente.");
 }
 
-/**
- * Update user (ID is the old email)
- */
-function updateUsuario(currentEmail, data) {
-  const sheet = getSheet(SHEET_NAMES.USUARIOS);
-  const rows = sheet.getDataRange().getValues();
-  
-  for (let i = 1; i < rows.length; i++) {
-    if (String(rows[i][COLUMNS.USUARIOS.EMAIL]) === String(currentEmail)) {
-      // Update fields
-      if (data.email) sheet.getRange(i + 1, COLUMNS.USUARIOS.EMAIL + 1).setValue(data.email);
-      if (data.password && data.password !== "") sheet.getRange(i + 1, COLUMNS.USUARIOS.PASSWORD + 1).setValue(data.password);
-      if (data.role) sheet.getRange(i + 1, COLUMNS.USUARIOS.ROL + 1).setValue(data.role);
-      if (data.name) sheet.getRange(i + 1, COLUMNS.USUARIOS.NOMBRE + 1).setValue(data.name);
+function updateUsuario(email, data) {
+  try {
+    const sheet = getSheet(SHEET_NAMES.USUARIOS);
+    const dataRange = sheet.getDataRange().getValues();
+    let rowIndex = -1;
+    
+    for (let i = 1; i < dataRange.length; i++) {
+        if (dataRange[i][COLUMNS.USUARIOS.EMAIL] === email) {
+            rowIndex = i + 1;
+            break;
+        }
+    }
+    
+    if (rowIndex > 1) {
+      if (data.password) sheet.getRange(rowIndex, COLUMNS.USUARIOS.PASSWORD + 1).setValue(data.password);
+      if (data.rol) sheet.getRange(rowIndex, COLUMNS.USUARIOS.ROL + 1).setValue(data.rol);
+      if (data.nombre) sheet.getRange(rowIndex, COLUMNS.USUARIOS.NOMBRE + 1).setValue(data.nombre);
       
-      return createResponse(true, null, "Usuario actualizado.");
+      return createResponse(true, null, "Usuario actualizado exitosamente");
     }
+    return createResponse(false, null, "Usuario no encontrado");
+  } catch (error) {
+    return createResponse(false, null, error.toString());
   }
-  return createErrorResponse("Usuario no encontrado.");
 }
 
-/**
- * Delete user
- */
-function deleteUsuario(email) {
-  const sheet = getSheet(SHEET_NAMES.USUARIOS);
-  const rows = sheet.getDataRange().getValues();
-  
-  for (let i = 1; i < rows.length; i++) {
-    if (String(rows[i][COLUMNS.USUARIOS.EMAIL]) === String(email)) {
-      sheet.deleteRow(i + 1);
-      return createResponse(true, null, "Usuario eliminado.");
+function deleteUsuario(email, data) {
+  try {
+    const sheet = getSheet(SHEET_NAMES.USUARIOS);
+    const dataValues = sheet.getDataRange().getValues();
+    
+    for (let i = 1; i < dataValues.length; i++) {
+        if (dataValues[i][COLUMNS.USUARIOS.EMAIL] === email) {
+            sheet.deleteRow(i + 1);
+            // Audit Log
+            registrarAccion('Usuarios', 'eliminar', `Usuario ${email} eliminado`, 'warning', null, data ? data.justificacion : null);
+            return createResponse(true, { message: 'Usuario eliminado' });
+        }
     }
+    throw new Error('Usuario no encontrado');
+  } catch (error) {
+    return createResponse(false, null, error.toString());
   }
-  return createErrorResponse("Usuario no encontrado.");
 }

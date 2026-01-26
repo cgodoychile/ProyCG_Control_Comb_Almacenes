@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { estanquesApi, cargasApi, agendamientosApi } from '@/lib/apiService';
+import { estanquesApi, cargasApi, agendamientosApi, auditoriaApi } from '@/lib/apiService';
 import { EstanqueForm } from '@/components/forms/EstanqueForm';
 import { CargaForm } from '@/components/forms/CargaForm';
 import { TankStatus } from '@/components/dashboard/TankStatus';
-import { cn } from '@/lib/utils';
+import { cn, getLocalDate } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,10 +33,11 @@ import { format, isAfter, parseISO } from 'date-fns';
 import { useAuth } from '@/context/AuthContext';
 import { speakSuccess } from '@/utils/voiceNotification';
 import { useApi } from '@/hooks/useApi';
+import { ConfirmDeleteWithJustificationDialog } from '@/components/shared/ConfirmDeleteWithJustificationDialog';
 import type { Estanque, CargaEstanque } from '@/types/crm';
 
 export function EstanquesModule() {
-  const { canEdit } = useAuth();
+  const { canEdit, isAdmin, user } = useAuth();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingEstanque, setEditingEstanque] = useState<any>(null);
   const [isCargaFormOpen, setIsCargaFormOpen] = useState(false);
@@ -45,6 +46,7 @@ export function EstanquesModule() {
   const [agendamientoToConfirm, setAgendamientoToConfirm] = useState<any>(null);
   const [numeroGuia, setNumeroGuia] = useState('');
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -96,11 +98,13 @@ export function EstanquesModule() {
     });
   };
 
-  const handleDeleteAction = async (id: string) => {
-    await execute(estanquesApi.delete(id), {
+  const handleDeleteAction = async (id: string, justification: string) => {
+    await execute(estanquesApi.delete(id, { justificacion: justification }), {
       successMessage: "Estanque eliminado correctamente.",
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ['estanques'] });
+        setIsDeleteDialogOpen(false);
+        setDeleteTargetId(null);
       }
     });
   };
@@ -144,13 +148,39 @@ export function EstanquesModule() {
 
   const handleDelete = (id: string) => {
     setDeleteTargetId(id);
+    setIsDeleteDialogOpen(true);
   };
 
-  const confirmDelete = () => {
-    if (deleteTargetId) {
-      handleDeleteAction(deleteTargetId);
-      setDeleteTargetId(null);
-    }
+  const confirmDelete = async (justification: string) => {
+    if (!deleteTargetId) return;
+
+    // Flow for EVERYONE: Send a deletion request
+    const estanque = estanquesData.find((e: any) => e.id === deleteTargetId);
+    const estanqueName = estanque ? estanque.nombre : deleteTargetId;
+
+    await execute(
+      auditoriaApi.create({
+        modulo: 'Estanques',
+        accion: 'solicitud_eliminacion',
+        mensaje: JSON.stringify({
+          entity: 'estanques',
+          id: deleteTargetId,
+          name: estanqueName,
+          justification: justification
+        }),
+        tipo: 'warning',
+        usuario: user?.email || 'Usuario',
+        justificacion: justification
+      }),
+      {
+        successMessage: "Solicitud de eliminación enviada para aprobación del administrador.",
+        onSuccess: () => {
+          setIsDeleteDialogOpen(false);
+          setDeleteTargetId(null);
+          queryClient.invalidateQueries({ queryKey: ['activity-alerts'] });
+        }
+      }
+    );
   };
 
   const handleSubmit = (data: Partial<Estanque>) => {
@@ -216,28 +246,44 @@ export function EstanquesModule() {
         ...carga,
         tipo: 'real',
         numeroGuia: numeroGuia,
-        fecha: new Date().toISOString().split('T')[0]
+        fecha: getLocalDate()
       }), {
         successMessage: "Carga confirmada y stock actualizado.",
         onSuccess: async () => {
-          console.log('✅ Carga creada, eliminando agendamiento...');
-          // Only delete agendamiento if carga was created successfully
+          console.log('✅ Carga creada, eliminando agendamiento con ID:', carga.id);
+
           try {
-            await agendamientosApi.delete(carga.id);
-            console.log('✅ Agendamiento eliminado');
-            queryClient.invalidateQueries({ queryKey: ['estanques'] });
-            queryClient.invalidateQueries({ queryKey: ['cargas'] });
-            queryClient.invalidateQueries({ queryKey: ['agendamientos'] });
+            // Wait for deletion
+            const deleteResult = await agendamientosApi.delete(carga.id);
+
+            if (deleteResult.success) {
+              console.log('✅ Agendamiento eliminado');
+              toast({
+                title: "Sincronizado",
+                description: "El agendamiento ha sido removido satisfactoriamente."
+              });
+            } else {
+              throw new Error(deleteResult.message || "Error al eliminar agendamiento");
+            }
+
+            // Always refresh after both or the second one
+            await queryClient.invalidateQueries({ queryKey: ['estanques'] });
+            await queryClient.invalidateQueries({ queryKey: ['cargas'] });
+            await queryClient.invalidateQueries({ queryKey: ['agendamientos'] });
+
             setIsConfirmDialogOpen(false);
             setAgendamientoToConfirm(null);
             setNumeroGuia('');
-          } catch (error) {
+          } catch (error: any) {
             console.error('❌ Error eliminando agendamiento:', error);
             toast({
-              title: "Advertencia",
-              description: "La carga se creó pero no se pudo eliminar el agendamiento. Por favor, elimínelo manualmente.",
+              title: "Atención",
+              description: `La carga se creó pero no se pudo eliminar el agendamiento: ${error.message || 'Error desconocido'}. Por favor, elimínelo manualmente.`,
               variant: "destructive"
             });
+            // Still refresh to show the new real carga
+            queryClient.invalidateQueries({ queryKey: ['estanques'] });
+            queryClient.invalidateQueries({ queryKey: ['cargas'] });
           }
         }
       });
@@ -577,25 +623,20 @@ export function EstanquesModule() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!deleteTargetId} onOpenChange={(open) => !open && setDeleteTargetId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar estanque?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta acción no se puede deshacer. El estanque será eliminado permanentemente del sistema.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Eliminar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDeleteWithJustificationDialog
+        open={isDeleteDialogOpen}
+        onClose={() => {
+          setIsDeleteDialogOpen(false);
+          setDeleteTargetId(null);
+        }}
+        onConfirm={confirmDelete}
+        isLoading={isActionLoading}
+        title="¿Eliminar estanque?"
+        description="Esta acción no se puede deshacer. El estanque será eliminado permanentemente del sistema. Se requiere una justificación."
+        itemName={estanquesData.find((e: any) => e.id === deleteTargetId)?.nombre || deleteTargetId || undefined}
+        isAdmin={isAdmin}
+        isCritical={true}
+      />
     </div>
 
   );

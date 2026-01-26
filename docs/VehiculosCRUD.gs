@@ -14,7 +14,7 @@ function handleVehiculosPost(action, id, data) {
   switch (action.toLowerCase()) {
     case 'create': return createVehiculo(data);
     case 'update': return updateVehiculo(id, data);
-    case 'delete': return deleteVehiculo(id);
+    case 'delete': return deleteVehiculo(id, data);
     default: return createErrorResponse('Acción no válida', 400);
   }
 }
@@ -124,10 +124,12 @@ function createVehiculo(data) {
     
     const cleanId = String(data.id).trim().toUpperCase();
 
-    // Check duplicates
-    for (let i = 1; i < existingData.length; i++) {
-      if (String(existingData[i][COLUMNS.VEHICULOS.PATENTE]).trim().toUpperCase() === cleanId) {
-        throw new Error('Ya existe un vehículo con esta patente');
+    // Idempotency check: if it already exists, return success to clear sync queue
+    const moveData = sheet.getDataRange().getValues();
+    for (let i = 1; i < moveData.length; i++) {
+      if (String(moveData[i][COLUMNS.VEHICULOS.PATENTE]).trim().toUpperCase() === cleanId) {
+        console.warn("Vehicle already exists, returning success for idempotency: " + cleanId);
+        return createResponse(true, { id: cleanId, ...data, _isDuplicate: true }, "Este vehículo ya está registrado");
       }
     }
     
@@ -197,18 +199,18 @@ function updateVehiculo(id, data) {
   }
 }
 
-function deleteVehiculo(id) {
+function deleteVehiculo(id, data) {
   try {
     if (!id) throw new Error('Patente es requerida');
     const sheet = getSheet(SHEET_NAMES.VEHICULOS);
-    const data = sheet.getDataRange().getValues();
+    const sheetData = sheet.getDataRange().getValues();
     
-    for (let i = 1; i < data.length; i++) {
-      if (data[i][COLUMNS.VEHICULOS.PATENTE] === id) {
+    for (let i = 1; i < sheetData.length; i++) {
+      if (sheetData[i][COLUMNS.VEHICULOS.PATENTE] === id) {
         sheet.deleteRow(i + 1);
         
         // Audit Log
-        registrarAccion('Vehículos', 'eliminar', `Vehículo eliminado: ${id}`, 'warning', null);
+        registrarAccion('Vehículos', 'eliminar', `Vehículo eliminado: ${id}`, 'warning', null, data ? data.justificacion : null);
         
         return createResponse(true, { message: 'Vehículo eliminado' });
       }

@@ -14,7 +14,7 @@ function handleEstanquesPost(action, id, data) {
   switch (action.toLowerCase()) {
     case 'create': return createEstanque(data);
     case 'update': return updateEstanque(id, data);
-    case 'delete': return deleteEstanque(id);
+    case 'delete': return deleteEstanque(id, data);
     case 'recalculate': return recalcularTotal();
     default: return createErrorResponse('Acción no válida', 400);
   }
@@ -106,7 +106,6 @@ function getEstanqueById(id) {
 function createEstanque(data) {
   try {
     const sheet = getSheet(SHEET_NAMES.ESTANQUES);
-    const id = new Date().getTime().toString();
     
     // DYNAMIC MAP
     const colMap = findColumnIndices(sheet, {
@@ -120,6 +119,13 @@ function createEstanque(data) {
         TIPO: ['TIPO', 'COMBUSTIBLE'],
         RESPONSABLE: ['RESPONSABLE', 'ENCARGADO']
     });
+
+    // Idempotency check
+    const idIdx = colMap.ID !== -1 ? colMap.ID : COLUMNS.ESTANQUES.ID;
+    const duplicateResponse = checkIdempotency(sheet, data.clientRequestId, idIdx);
+    if (duplicateResponse) return duplicateResponse;
+
+    const id = data.clientRequestId || new Date().getTime().toString();
 
     const indices = Object.values(colMap).filter(v => v !== -1);
     const maxIdx = Math.max(...indices, 10);
@@ -200,7 +206,7 @@ function updateEstanque(id, data) {
   }
 }
 
-function deleteEstanque(id) {
+function deleteEstanque(id, data) {
   try {
     const targetId = String(id || '').trim();
     Logger.log(`[!] ELIMINAR ESTANQUE: targetId='${targetId}'`);
@@ -230,7 +236,7 @@ function deleteEstanque(id) {
             found = true;
             
             if (typeof registrarAccion === 'function') {
-              registrarAccion('Estanques', 'eliminar', `Estanque eliminado: ${nombreEstanque} (ID: ${targetId})`, 'warning', null);
+              registrarAccion('Estanques', 'eliminar', `Estanque eliminado: ${nombreEstanque} (ID: ${targetId})`, 'warning', null, data ? data.justificacion : null);
             }
             
             SpreadsheetApp.flush();

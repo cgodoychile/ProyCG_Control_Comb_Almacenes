@@ -3,10 +3,38 @@ import { Button } from '@/components/ui/button';
 import { CheckCheck, AlertTriangle, Info, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Trash2 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { useApi } from '@/hooks/useApi';
+import { alertasApi } from '@/lib/apiService';
+import { useQueryClient } from '@tanstack/react-query';
 
 export function AlertasModule() {
   const { alerts, activeAlerts, handleDismiss, handleDismissAll, handleClearDismissed, isLoading } = useAlerts();
+  const { isAdmin } = useAuth();
+  const { execute, loading: isProcessing } = useApi();
+  const queryClient = useQueryClient();
+
+  const handleApproveDelete = async (alerta: any) => {
+    if (!alerta.data || !alerta.data.entity || !alerta.data.id) return;
+
+    await execute(
+      alertasApi.update(alerta.id, {
+        action: 'approveAndDelete',
+        targetEntity: alerta.data.entity,
+        targetId: alerta.data.id,
+        restoreStock: alerta.data.restoreStock,
+        justification: alerta.data.justification
+      } as any),
+      {
+        successMessage: "Registro eliminado y solicitud procesada correctamente.",
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ['activity-alerts'] });
+          queryClient.invalidateQueries({ queryKey: [alerta.data.entity] });
+        }
+      }
+    );
+  };
 
   if (isLoading) {
     return (
@@ -87,15 +115,29 @@ export function AlertasModule() {
                 </div>
               </div>
 
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-900/20 self-center"
-                onClick={() => handleDismiss(alerta.id)}
-              >
-                <CheckCheck className="w-4 h-4 mr-2" />
-                Listo
-              </Button>
+              <div className="flex flex-col gap-2 self-center">
+                {isAdmin && alerta.accion === 'solicitud_eliminacion' && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="gap-2"
+                    disabled={isProcessing}
+                    onClick={() => handleApproveDelete(alerta)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Aprobar y Eliminar
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-900/20"
+                  onClick={() => handleDismiss(alerta.id)}
+                >
+                  <CheckCheck className="w-4 h-4 mr-2" />
+                  Listo
+                </Button>
+              </div>
             </div>
           ))
         )}

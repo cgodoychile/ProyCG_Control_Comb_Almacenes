@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { vehiculosApi } from '@/lib/apiService';
+import { vehiculosApi, auditoriaApi } from '@/lib/apiService';
 import { VehiculoForm } from '@/components/forms/VehiculoForm';
 import { Button } from '@/components/ui/button';
 import { Plus, Loader2, Edit, Trash2, Car, Calendar, Gauge } from 'lucide-react';
-import { ConfirmDeleteDialog } from '@/components/shared/ConfirmDeleteDialog';
+import { ConfirmDeleteWithJustificationDialog } from '@/components/shared/ConfirmDeleteWithJustificationDialog';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format, addDays, isBefore } from 'date-fns';
@@ -16,7 +16,7 @@ import { useApi } from '@/hooks/useApi';
 import type { Vehiculo } from '@/types/crm';
 
 export function VehiculosModule() {
-    const { canEdit } = useAuth(); // Auth
+    const { canEdit, isAdmin, user } = useAuth(); // Auth
 
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -74,8 +74,8 @@ export function VehiculosModule() {
         });
     };
 
-    const handleDeleteAction = async (id: string) => {
-        await execute(vehiculosApi.delete(id), {
+    const handleDeleteAction = async (id: string, justification: string) => {
+        await execute(vehiculosApi.delete(id, { justificacion: justification }), {
             successMessage: "Vehículo eliminado correctamente.",
             onSuccess: () => {
                 queryClient.invalidateQueries({ queryKey: ['vehiculos'] });
@@ -101,9 +101,36 @@ export function VehiculosModule() {
         setIsDeleteDialogOpen(true);
     };
 
-    const confirmDelete = () => {
+    const confirmDelete = async (justification: string) => {
         if (!vehicleToDelete) return;
-        handleDeleteAction(vehicleToDelete);
+
+        // Flow for EVERYONE: Send a deletion request
+        const vehiculo = vehiculosData.find(v => v.id === vehicleToDelete);
+        const vehName = vehiculo ? `${vehiculo.marca} ${vehiculo.modelo} (${vehiculo.id})` : vehicleToDelete;
+
+        await execute(
+            auditoriaApi.create({
+                modulo: 'Vehículos',
+                accion: 'solicitud_eliminacion',
+                mensaje: JSON.stringify({
+                    entity: 'vehiculos',
+                    id: vehicleToDelete,
+                    name: vehName,
+                    justification: justification
+                }),
+                tipo: 'warning',
+                usuario: user?.email || 'Usuario',
+                justificacion: justification
+            }),
+            {
+                successMessage: "Solicitud de eliminación enviada para aprobación del administrador.",
+                onSuccess: () => {
+                    setIsDeleteDialogOpen(false);
+                    setVehicleToDelete(null);
+                    queryClient.invalidateQueries({ queryKey: ['activity-alerts'] });
+                }
+            }
+        );
     };
 
     const handleSubmit = (data: Partial<Vehiculo>) => {
@@ -291,13 +318,16 @@ export function VehiculosModule() {
                 isLoading={isActionLoading}
             />
             {/* Confirmation Dialog */}
-            <ConfirmDeleteDialog
+            <ConfirmDeleteWithJustificationDialog
                 open={isDeleteDialogOpen}
                 onClose={() => setIsDeleteDialogOpen(false)}
                 onConfirm={confirmDelete}
                 isLoading={isActionLoading}
                 title="¿Eliminar vehículo?"
-                description={`¿Está seguro de que desea eliminar el vehículo con patente ${vehicleToDelete}? Esta acción no se puede deshacer.`}
+                description={`Esta acción no se puede deshacer. Se requiere una justificación.`}
+                itemName={vehiculosData.find(v => v.id === vehicleToDelete)?.id || vehicleToDelete || undefined}
+                isAdmin={isAdmin}
+                isCritical={true}
             />
         </div >
     );

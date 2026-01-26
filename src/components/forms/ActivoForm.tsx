@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
+import { getLocalDate } from '@/lib/utils';
+
 interface ActivoFormProps {
     open: boolean;
     onClose: () => void;
@@ -31,7 +33,7 @@ export function ActivoForm({ open, onClose, onSubmit, initialData, almacenes = [
             categoria: '',
             ubicacion: '',
             estado: 'operativo',
-            fechaAdquisicion: new Date().toISOString().split('T')[0],
+            fechaAdquisicion: getLocalDate(),
             valorInicial: 0,
             responsable: '',
         },
