@@ -147,19 +147,78 @@ function getAllAuditoria() {
 function approveAndDelete(alertId, data) {
   try {
     if (!alertId) throw new Error('ID de alerta es requerido');
-    if (!data.targetEntity || !data.targetId) throw new Error('Entidad y ID objetivo son requeridos');
+    
+    // Intento de extracción de metadatos del mensaje si no vienen en data
+    if (!data.targetEntity || !data.targetId) {
+      const ss = getSS();
+      const sheet = ss.getSheetByName(SHEET_NAMES.AUDITORIA) || ss.getSheetByName(SHEET_NAMES.ALERTA) || ss.getSheetByName('Alertas');
+      
+      if (sheet) {
+        const rows = sheet.getDataRange().getValues();
+        const colMap = findColumnIndices(sheet, { ID: ['ID', 'CODIGO'], MENSAJE: ['MENSAJE', 'DESCRIPCION'] });
+        const idIdx = colMap.ID !== -1 ? colMap.ID : 0;
+        const msgIdx = colMap.MENSAJE !== -1 ? colMap.MENSAJE : 5;
+        
+        for (let i = 1; i < rows.length; i++) {
+          if (rows[i][idIdx] == alertId) {
+            const msg = String(rows[i][msgIdx]);
+            
+            // INTENTO 1: Parsear reporte JSON robusto
+            const jsonMatch = msg.match(/(\{.*?\})/);
+            if (jsonMatch) {
+              try {
+                const parsed = JSON.parse(jsonMatch[1]);
+                data.targetEntity = parsed.entity || data.targetEntity;
+                data.targetId = parsed.id || parsed.patente || data.targetId;
+                data.itemName = parsed.name || data.itemName;
+                if (parsed.restoreStock !== undefined) data.restoreStock = parsed.restoreStock;
+                if (parsed.deleteFromWarehouse !== undefined) data.deleteFromWarehouse = parsed.deleteFromWarehouse;
+              } catch (e) {
+                console.error("Error parseando JSON en auditoría:", e);
+              }
+            }
+            
+            // INTENTO 2: Extraer del texto si el JSON falló o es parcial
+            if (!data.targetEntity || !data.targetId) {
+               // Ejemplo: "Solicitud de eliminación: Activo - NOTEBOOK HP G7 (ID: ACT-000001)"
+               const entityMatch = msg.match(/(Activo|Vehículo|Estanque|Consumo|Persona|Usuario|Mantención|Bodega|Producto|Carga)/i);
+               if (entityMatch) {
+                 const entityMap = { 
+                   'activo': 'activos', 'vehículo': 'vehiculos', 'vehiculo': 'vehiculos', 
+                   'estanque': 'estanques', 'consumo': 'consumos', 'persona': 'personas', 
+                   'usuario': 'usuarios', 'mantención': 'mantenciones', 'mantencion': 'mantenciones', 
+                   'bodega': 'almacenes', 'producto': 'productos_almacen', 'carga': 'cargas' 
+                 };
+                 data.targetEntity = entityMap[entityMatch[0].toLowerCase()] || entityMatch[0].toLowerCase();
+               }
+               
+               // Buscar patrón ID: [A-Z0-9-]+
+               const idMatch = msg.match(/ID:\s*([A-Z0-9-]+)/i) || msg.match(/\(([A-Z]+-[0-9-]+)\)/i);
+               if (idMatch) {
+                 data.targetId = idMatch[1].replace(/[()]/g, '').trim();
+               }
+            }
+            break;
+          }
+        }
+      }
+    }
+
+    if (!data.targetEntity || !data.targetId) throw new Error('No se pudo identificar la entidad o ID para eliminar');
 
     let result;
     // Execute the actual deletion based on entity
     switch (data.targetEntity.toLowerCase()) {
-      case 'consumos': result = deleteConsumo(data.targetId, { restoreStock: data.restoreStock === true }); break;
-      case 'vehiculos': result = deleteVehiculo(data.targetId); break;
-      case 'estanques': result = deleteEstanque(data.targetId); break;
-      case 'activos': result = deleteActivo(data.targetId, { deleteFromWarehouse: data.deleteFromWarehouse === true }); break;
-      case 'personas': result = deletePersona(data.targetId); break;
-      case 'usuarios': result = deleteUsuario(data.targetId); break;
-      case 'mantenciones': result = deleteMantencion(data.targetId); break;
-      case 'almacenes': result = deleteAlmacen(data.targetId); break;
+      case 'consumos': result = deleteConsumo(data.targetId, { restoreStock: data.restoreStock === true, justificacion: data.justificacion }); break;
+      case 'vehiculos': result = deleteVehiculo(data.targetId, { justificacion: data.justificacion }); break;
+      case 'estanques': result = deleteEstanque(data.targetId, { justificacion: data.justificacion }); break;
+      case 'activos': result = deleteActivo(data.targetId, { deleteFromWarehouse: true, justificacion: data.justificacion }); break;
+      case 'personas': result = deletePersona(data.targetId, { justificacion: data.justificacion }); break;
+      case 'usuarios': result = deleteUsuario(data.targetId, { justificacion: data.justificacion }); break;
+      case 'mantenciones': result = deleteMantencion(data.targetId, { justificacion: data.justificacion }); break;
+      case 'almacenes': result = deleteAlmacen(data.targetId, { justificacion: data.justificacion }); break;
+      case 'productos':
+      case 'productos_almacen': result = deleteProducto(data.targetId, { justificacion: data.justificacion }); break;
       default: throw new Error('Entidad no soportada para eliminación aprobada: ' + data.targetEntity);
     }
 
@@ -180,8 +239,7 @@ function approveAndDelete(alertId, data) {
           }
         }
       }
-      }
-
+      
       // Final Audit of the APPROVAL
       const targetName = data.itemName || data.targetId;
       registrarAccion(

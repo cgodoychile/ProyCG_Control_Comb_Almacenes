@@ -2,7 +2,8 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import enelLogo from '@/assets/enel-logo.png';
+
+const LOGO_URL = '/LogoCorpEnel.png';
 
 // Helper to fetch image as buffer
 const fetchImage = async (url: string) => {
@@ -50,7 +51,7 @@ export const generateManualConsumptionExcel = async (tankName: string) => {
 
     // Embed Logo
     try {
-        const logoBuffer = await fetchImage(enelLogo);
+        const logoBuffer = await fetchImage(LOGO_URL);
         const imageId = workbook.addImage({
             buffer: logoBuffer,
             extension: 'png',
@@ -210,7 +211,7 @@ export const generateInventoryExcel = async (warehouseName: string) => {
 
     // Embed Logo
     try {
-        const logoBuffer = await fetchImage(enelLogo);
+        const logoBuffer = await fetchImage(LOGO_URL);
         const imageId = workbook.addImage({
             buffer: logoBuffer,
             extension: 'png',
@@ -349,7 +350,7 @@ export const generateManualExitExcel = async (warehouseName: string) => {
 
     // Embed Logo
     try {
-        const logoBuffer = await fetchImage(enelLogo);
+        const logoBuffer = await fetchImage(LOGO_URL);
         const imageId = workbook.addImage({
             buffer: logoBuffer,
             extension: 'png',
@@ -441,4 +442,136 @@ export const generateManualExitExcel = async (warehouseName: string) => {
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     saveAs(blob, `Control_Salida_${warehouseName.replace(/\s+/g, '_')}.xlsx`);
+};
+
+/**
+ * Genera un Acta de Cargo profesional en Excel
+ */
+export const generateCargoActaExcel = async (data: any) => {
+    const today = format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: es });
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Acta de Cargo');
+
+    worksheet.pageSetup.paperSize = 9; // A4
+    worksheet.pageSetup.margins = { left: 0.5, right: 0.5, top: 0.5, bottom: 0.5, header: 0, footer: 0 };
+
+    worksheet.columns = [
+        { width: 15 }, // A
+        { width: 20 }, // B
+        { width: 20 }, // C
+        { width: 15 }, // D
+        { width: 15 }, // E
+        { width: 20 }, // F
+    ];
+
+    // Encabezado
+    worksheet.mergeCells('A1:B3');
+    try {
+        const logoBuffer = await fetchImage(LOGO_URL);
+        const imageId = workbook.addImage({
+            buffer: logoBuffer,
+            extension: 'png',
+        });
+        worksheet.addImage(imageId, {
+            tl: { col: 0, row: 0 },
+            br: { col: 2, row: 3 },
+            editAs: 'oneCell'
+        } as any);
+    } catch (e) {
+        worksheet.getCell('A1').value = 'ENEL';
+        worksheet.getCell('A1').font = { size: 20, bold: true, color: { argb: 'FF005EB8' } };
+    }
+
+    worksheet.mergeCells('C1:F2');
+    const titleCell = worksheet.getCell('C1');
+    titleCell.value = 'ACTA DE CARGO Y ASIGNACIÓN DE EQUIPO';
+    titleCell.font = { name: 'Arial', size: 16, bold: true };
+    titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+
+    worksheet.mergeCells('C3:F3');
+    const dateCell = worksheet.getCell('C3');
+    dateCell.value = `Generado el ${today} | Sistema de Gestión de Activos Enel`;
+    dateCell.font = { size: 9, italic: true, color: { argb: 'FF666666' } };
+    dateCell.alignment = { horizontal: 'right' };
+
+    // Línea divisoria
+    worksheet.getRow(4).height = 10;
+    for (let i = 1; i <= 6; i++) {
+        worksheet.getCell(4, i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF005EB8' } };
+    }
+
+    // --- SECCIÓN 1: DATOS GENERALES ---
+    worksheet.mergeCells('A6:F6');
+    const sec1 = worksheet.getCell('A6');
+    sec1.value = '1. IDENTIFICACIÓN DEL RESPONSABLE';
+    sec1.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    sec1.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } };
+
+    const addRow = (rowNum: number, label: string, value: any) => {
+        worksheet.getCell(`A${rowNum}`).value = label;
+        worksheet.getCell(`A${rowNum}`).font = { bold: true, size: 10 };
+        worksheet.getCell(`A${rowNum}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+        worksheet.mergeCells(`B${rowNum}:F${rowNum}`);
+        worksheet.getCell(`B${rowNum}`).value = value || '-';
+        worksheet.getCell(`B${rowNum}`).alignment = { horizontal: 'left', indent: 1 };
+        worksheet.getRow(rowNum).border = { bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } } };
+    };
+
+    addRow(7, 'RESPONSABLE:', data.responsable);
+    addRow(8, 'CARGO / ROL:', data.cargo);
+    addRow(9, 'FECHA ENTREGA:', data.fecha || today);
+
+    // --- SECCIÓN 2: DETALLES DEL EQUIPO ---
+    worksheet.mergeCells('A11:F11');
+    const sec2 = worksheet.getCell('A11');
+    sec2.value = '2. DESCRIPCIÓN DEL RECURSO ASIGNADO';
+    sec2.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    sec2.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } };
+
+    addRow(12, 'EQUIPO:', data.equipo);
+    addRow(13, 'MARCA / MODELO:', `${data.marca || '-'} / ${data.modelo || '-'}`);
+    addRow(14, 'CAT. / PATENTE:', data.patente || data.serie || '-');
+
+    // --- SECCIÓN 3: OBSERVACIONES ---
+    worksheet.mergeCells('A16:F16');
+    const sec3 = worksheet.getCell('A16');
+    sec3.value = '3. ESTADO Y OBSERVACIONES DE ENTREGA';
+    sec3.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    sec3.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } };
+
+    worksheet.mergeCells('A17:F20');
+    const obsCell = worksheet.getCell('A17');
+    obsCell.value = data.observaciones || 'Se hace entrega del equipo en condiciones operativas estándar.';
+    obsCell.alignment = { vertical: 'top', horizontal: 'left', wrapText: true, indent: 1 };
+    obsCell.font = { italic: true };
+    obsCell.border = {
+        top: { style: 'thin' }, left: { style: 'thin' },
+        bottom: { style: 'thin' }, right: { style: 'thin' }
+    };
+
+    // --- SECCIÓN 4: COMPROMISO ---
+    worksheet.mergeCells('A22:F24');
+    const declCell = worksheet.getCell('A22');
+    declCell.value = "Declaro recibir conforme el equipo arriba detallado, comprometiéndome a su cuidado, uso exclusivo para fines laborales y cumplimiento de las normativas de seguridad de la empresa. En caso de pérdida o daño por negligencia, acepto las responsabilidades administrativas correspondientes.";
+    declCell.font = { size: 9, color: { argb: 'FF666666' } };
+    declCell.alignment = { wrapText: true, vertical: 'middle' };
+
+    // Firmas
+    worksheet.mergeCells('A28:C28');
+    worksheet.getCell('A28').border = { bottom: { style: 'medium' } };
+    worksheet.mergeCells('A29:C29');
+    worksheet.getCell('A29').value = 'FIRMA DEL RESPONSABLE (RECEPTOR)';
+    worksheet.getCell('A29').font = { size: 8, bold: true };
+    worksheet.getCell('A29').alignment = { horizontal: 'center' };
+
+    worksheet.mergeCells('E28:F28');
+    worksheet.getCell('E28').border = { bottom: { style: 'medium' } };
+    worksheet.mergeCells('E29:F29');
+    worksheet.getCell('E29').value = 'FIRMA SUPERVISOR (ENTREGA)';
+    worksheet.getCell('E29').font = { size: 8, bold: true };
+    worksheet.getCell('E29').alignment = { horizontal: 'center' };
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    saveAs(blob, `Acta_Cargo_${data.responsable.replace(/\s+/g, '_')}_${data.activoId || 'GEN'}.xlsx`);
 };

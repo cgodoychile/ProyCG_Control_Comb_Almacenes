@@ -83,17 +83,28 @@ function getEstanqueById(id) {
     if (!id) throw new Error('ID es requerido');
     const sheet = getSheet(SHEET_NAMES.ESTANQUES);
     const data = sheet.getDataRange().getValues();
+    const colMap = findColumnIndices(sheet, {
+        ID: ['ID', 'CODIGO', 'IDENTIFICADOR']
+    });
+    const idIdx = colMap.ID !== -1 ? colMap.ID : COLUMNS.ESTANQUES.ID;
     
     for (let i = 1; i < data.length; i++) {
-      if (data[i][COLUMNS.ESTANQUES.ID] == id) {
+      if (String(data[i][idIdx]).trim() === String(id).trim()) {
         const row = data[i];
+        // Retornar objeto completo mapeado
+        const fullMap = findColumnIndices(sheet, {
+            ID: ['ID'], NOMBRE: ['NOMBRE'], UBICACION: ['UBICACION'], 
+            CAPACIDAD: ['CAPACIDAD'], STOCK: ['STOCK'], ESTADO: ['ESTADO'],
+            FECHA_ULTIMA_CARGA: ['FECHA_ULTIMA_CARGA', 'FECHA']
+        });
         return createResponse(true, {
-          id: row[COLUMNS.ESTANQUES.ID],
-            nombre: row[COLUMNS.ESTANQUES.NOMBRE],
-            ubicacion: row[COLUMNS.ESTANQUES.UBICACION],
-            capacidadTotal: row[COLUMNS.ESTANQUES.CAPACIDAD_TOTAL],
-            stockActual: row[COLUMNS.ESTANQUES.STOCK_ACTUAL],
-            estado: row[COLUMNS.ESTANQUES.ESTADO]
+          id: row[idIdx],
+          nombre: row[fullMap.NOMBRE !== -1 ? fullMap.NOMBRE : 1],
+          ubicacion: row[fullMap.UBICACION !== -1 ? fullMap.UBICACION : 2],
+          capacidadTotal: row[fullMap.CAPACIDAD !== -1 ? fullMap.CAPACIDAD : 3],
+          stockActual: row[fullMap.STOCK !== -1 ? fullMap.STOCK : 4],
+          estado: row[fullMap.ESTADO !== -1 ? fullMap.ESTADO : 5],
+          fechaUltimaCarga: row[fullMap.FECHA_ULTIMA_CARGA !== -1 ? fullMap.FECHA_ULTIMA_CARGA : 6]
         });
       }
     }
@@ -107,48 +118,36 @@ function createEstanque(data) {
   try {
     const sheet = getSheet(SHEET_NAMES.ESTANQUES);
     
-    // DYNAMIC MAP
     const colMap = findColumnIndices(sheet, {
         ID: ['ID', 'CODIGO', 'IDENTIFICADOR'],
-        NOMBRE: ['NOMBRE', 'ESTANQUE', 'NOMBRE ESTANQUE'],
+        NOMBRE: ['NOMBRE', 'ESTANQUE'],
         UBICACION: ['UBICACION'],
-        CAPACIDAD: ['CAPACIDAD', 'CAPACIDAD TOTAL'],
-        STOCK: ['STOCK', 'STOCK ACTUAL'],
-        MINIMO: ['STOCK MINIMO', 'ALERTA', 'MINIMO'],
+        CAPACIDAD: ['CAPACIDAD', 'CAPACIDAD_TOTAL'],
+        STOCK: ['STOCK', 'STOCK_ACTUAL'],
         ESTADO: ['ESTADO'],
-        TIPO: ['TIPO', 'COMBUSTIBLE'],
-        RESPONSABLE: ['RESPONSABLE', 'ENCARGADO']
+        FECHA_ULTIMA_CARGA: ['FECHA_ULTIMA_CARGA', 'FECHA']
     });
 
-    // Idempotency check
     const idIdx = colMap.ID !== -1 ? colMap.ID : COLUMNS.ESTANQUES.ID;
-    const duplicateResponse = checkIdempotency(sheet, data.clientRequestId, idIdx);
-    if (duplicateResponse) return duplicateResponse;
+    const id = generateSequentialId('EST', SHEET_NAMES.ESTANQUES, 'ID', 3);
 
-    const id = data.clientRequestId || new Date().getTime().toString();
-
-    const indices = Object.values(colMap).filter(v => v !== -1);
-    const maxIdx = Math.max(...indices, 10);
-    const newRow = new Array(maxIdx + 1).fill('');
+    // Array estricto de 10 columnas para evitar desalineación
+    const rowData = new Array(10).fill('');
     
-    const set = (keyIdx, val) => {
-        if (keyIdx !== -1) newRow[keyIdx] = val;
-    };
+    rowData[idIdx] = id;
+    rowData[colMap.NOMBRE !== -1 ? colMap.NOMBRE : COLUMNS.ESTANQUES.NOMBRE] = data.nombre || '';
+    rowData[colMap.UBICACION !== -1 ? colMap.UBICACION : COLUMNS.ESTANQUES.UBICACION] = data.ubicacion || '';
+    rowData[colMap.CAPACIDAD !== -1 ? colMap.CAPACIDAD : COLUMNS.ESTANQUES.CAPACIDAD_TOTAL] = Number(data.capacidadTotal) || 0;
+    rowData[colMap.STOCK !== -1 ? colMap.STOCK : COLUMNS.ESTANQUES.STOCK_ACTUAL] = Number(data.stockActual) || 0;
+    rowData[colMap.MINIMO !== -1 ? colMap.MINIMO : COLUMNS.ESTANQUES.STOCK_MINIMO] = Number(data.alertaMinima) || 0;
+    rowData[colMap.ESTADO !== -1 ? colMap.ESTADO : COLUMNS.ESTANQUES.ESTADO] = data.estado || 'operativo';
+    rowData[colMap.TIPO !== -1 ? colMap.TIPO : COLUMNS.ESTANQUES.TIPO_COMBUSTIBLE] = data.tipoCombustible || 'Diesel';
+    rowData[colMap.FECHA_ULTIMA_CARGA !== -1 ? colMap.FECHA_ULTIMA_CARGA : COLUMNS.ESTANQUES.FECHA_ULTIMA_CARGA] = data.fechaUltimaCarga || '';
+    rowData[colMap.RESPONSABLE !== -1 ? colMap.RESPONSABLE : COLUMNS.ESTANQUES.RESPONSABLE] = data.responsable || '';
     
-    set(colMap.ID !== -1 ? colMap.ID : COLUMNS.ESTANQUES.ID, id);
-    set(colMap.NOMBRE !== -1 ? colMap.NOMBRE : COLUMNS.ESTANQUES.NOMBRE, data.nombre);
-    set(colMap.UBICACION !== -1 ? colMap.UBICACION : COLUMNS.ESTANQUES.UBICACION, data.ubicacion);
-    set(colMap.CAPACIDAD !== -1 ? colMap.CAPACIDAD : COLUMNS.ESTANQUES.CAPACIDAD_TOTAL, data.capacidadTotal);
-    set(colMap.STOCK !== -1 ? colMap.STOCK : COLUMNS.ESTANQUES.STOCK_ACTUAL, data.stockActual || 0);
-    set(colMap.MINIMO !== -1 ? colMap.MINIMO : COLUMNS.ESTANQUES.STOCK_MINIMO, data.alertaMinima || 0);
-    set(colMap.ESTADO !== -1 ? colMap.ESTADO : COLUMNS.ESTANQUES.ESTADO, data.estado || 'operativo');
-    set(colMap.TIPO !== -1 ? colMap.TIPO : COLUMNS.ESTANQUES.TIPO_COMBUSTIBLE, data.tipoCombustible || 'Diesel');
-    set(colMap.RESPONSABLE !== -1 ? colMap.RESPONSABLE : COLUMNS.ESTANQUES.RESPONSABLE, data.responsable || '');
+    sheet.appendRow(rowData);
     
-    sheet.appendRow(newRow);
-    
-    // Audit Log
-    registrarAccion('Estanques', 'crear', `Nuevo estanque registrado: ${data.nombre} (Capacidad: ${data.capacidadTotal}L)`, 'success', data.responsable);
+    registrarAccion('Estanques', 'crear', `Nuevo estanque: ${data.nombre} (ID: ${id})`, 'success');
     
     return createResponse(true, { id: id, ...data });
   } catch (error) {
@@ -190,9 +189,10 @@ function updateEstanque(id, data) {
         write(colMap.UBICACION !== -1 ? colMap.UBICACION : COLUMNS.ESTANQUES.UBICACION, data.ubicacion);
         write(colMap.CAPACIDAD !== -1 ? colMap.CAPACIDAD : COLUMNS.ESTANQUES.CAPACIDAD_TOTAL, data.capacidadTotal);
         write(colMap.STOCK !== -1 ? colMap.STOCK : COLUMNS.ESTANQUES.STOCK_ACTUAL, data.stockActual);
-        write(colMap.ESTADO !== -1 ? colMap.ESTADO : COLUMNS.ESTANQUES.ESTADO, data.estado);
         write(colMap.MINIMO !== -1 ? colMap.MINIMO : COLUMNS.ESTANQUES.STOCK_MINIMO, data.alertaMinima);
+        write(colMap.ESTADO !== -1 ? colMap.ESTADO : COLUMNS.ESTANQUES.ESTADO, data.estado);
         write(colMap.TIPO !== -1 ? colMap.TIPO : COLUMNS.ESTANQUES.TIPO_COMBUSTIBLE, data.tipoCombustible);
+        write(colMap.FECHA_ULTIMA_CARGA !== -1 ? colMap.FECHA_ULTIMA_CARGA : COLUMNS.ESTANQUES.FECHA_ULTIMA_CARGA, data.fechaUltimaCarga);
         write(colMap.RESPONSABLE !== -1 ? colMap.RESPONSABLE : COLUMNS.ESTANQUES.RESPONSABLE, data.responsable);
         
         registrarAccion('Estanques', 'actualizar', `Estanque actualizado: ${data.nombre || rows[i][(colMap.NOMBRE !== -1 ? colMap.NOMBRE : COLUMNS.ESTANQUES.NOMBRE)]}`, 'info', data.responsable);
@@ -209,46 +209,34 @@ function updateEstanque(id, data) {
 function deleteEstanque(id, data) {
   try {
     const targetId = String(id || '').trim();
-    Logger.log(`[!] ELIMINAR ESTANQUE: targetId='${targetId}'`);
-    
     if (!targetId) throw new Error('ID es requerido');
     
     const sheet = getSheet(SHEET_NAMES.ESTANQUES);
     const rows = sheet.getDataRange().getValues();
     
     const colMap = findColumnIndices(sheet, {
-        ID: ['ID', 'CODIGO'],
-        NOMBRE: ['NOMBRE']
+        ID: ['ID', 'CODIGO']
     });
-    const idIdx = colMap.ID !== -1 ? colMap.ID : COLUMNS.ESTANQUES.ID;
-    const nmIdx = colMap.NOMBRE !== -1 ? colMap.NOMBRE : COLUMNS.ESTANQUES.NOMBRE;
-    
-    let found = false;
+    const idIdx = colMap.ID !== -1 ? colMap.ID : 0;
     
     for (let i = 1; i < rows.length; i++) {
         const rowId = String(rows[i][idIdx] || '').trim();
         
-        if (rowId === targetId || (rowId && targetId && rowId == targetId)) {
-            const nombreEstanque = rows[i][nmIdx] || 'Sin Nombre';
-            Logger.log(`   -> [MATCH] Fila ${i+1}: ${nombreEstanque}`);
-            
+        if (rowId === targetId) {
             sheet.deleteRow(i + 1);
-            found = true;
             
-            if (typeof registrarAccion === 'function') {
-              registrarAccion('Estanques', 'eliminar', `Estanque eliminado: ${nombreEstanque} (ID: ${targetId})`, 'warning', null, data ? data.justificacion : null);
-            }
+            // Limpiar referencias en bodegas
+            cleanupWarehouseReferences('Estanque', targetId);
+            
+            registrarAccion('Estanques', 'eliminar', `Estanque eliminado (ID: ${targetId})`, 'warning');
             
             SpreadsheetApp.flush();
             return createResponse(true, { message: 'Estanque eliminado exitosamente' });
         }
     }
     
-    if (!found) {
-        throw new Error(`Estanque con ID ${targetId} no encontrado`);
-    }
+    throw new Error(`Estanque con ID ${targetId} no encontrado`);
   } catch (error) {
-    Logger.log(`❌ Error deleteEstanque: ${error.toString()}`);
     return createResponse(false, null, error.toString());
   }
 }

@@ -178,14 +178,21 @@ export function ReportesModule() {
         if (selectedReport === 'almacenes') {
             const totalItems = productos.reduce((acc, curr) => acc + (curr.stockActual || 0), 0);
             const lowStockCount = productos.filter(p => p.stockActual <= p.stockMinimo).length;
+            const totalValorizacion = productos.reduce((acc, curr) => acc + ((curr.stockActual || 0) * (curr.valorInicial || 0)), 0);
 
             // Stock by Warehouse
             const stockByAlmacen: { [key: string]: number } = {};
+            const valorByAlmacen: { [key: string]: number } = {};
             productos.forEach(p => {
                 const a = almacenes.find(alm => alm.id === p.almacenId)?.nombre || 'Desconocido';
                 stockByAlmacen[a] = (stockByAlmacen[a] || 0) + (p.stockActual || 0);
+                valorByAlmacen[a] = (valorByAlmacen[a] || 0) + ((p.stockActual || 0) * (p.valorInicial || 0));
             });
-            const chartDataAlmacen = Object.keys(stockByAlmacen).map(name => ({ name, value: stockByAlmacen[name] }));
+            const chartDataAlmacen = Object.keys(stockByAlmacen).map(name => ({
+                name,
+                value: stockByAlmacen[name],
+                valor: valorByAlmacen[name]
+            }));
 
             // Movements Trends (Last 30 days)
             const movementGroups: { [key: string]: { entrado: number, salido: number } } = {};
@@ -205,20 +212,12 @@ export function ReportesModule() {
                 return new Date(y1, m1 - 1, d1).getTime() - new Date(y2, m2 - 1, d2).getTime();
             }).slice(-15);
 
-            // Categories
-            const catGroups: { [key: string]: number } = {};
-            productos.forEach(p => {
-                const c = p.categoria || 'Sin Categoría';
-                catGroups[c] = (catGroups[c] || 0) + 1;
-            });
-            const chartDataCategories = Object.keys(catGroups).map(name => ({ name, value: catGroups[name] }));
-
             return {
                 totalItems,
                 lowStockCount,
+                totalValorizacion,
                 chartDataAlmacen,
-                chartDataMovements,
-                chartDataCategories
+                chartDataMovements
             };
         }
 
@@ -299,8 +298,8 @@ export function ReportesModule() {
 
         switch (selectedReport) {
             case 'consumo':
-                title = 'Reporte de Consumo';
-                columns = ['Fecha', 'Vehículo', 'Estanque', 'Litros', 'Persona', 'Responsable', 'Justificación'];
+                title = 'Reporte de Consumo de Combustible';
+                columns = ['Fecha', 'Vehículo', 'Estanque', 'Litros', 'Empresa/Persona', 'Responsable', 'Justificación'];
                 data = previewData.map(c => [
                     formatDate(c.fecha),
                     c.vehiculo,
@@ -605,7 +604,7 @@ export function ReportesModule() {
                                                 <YAxis fontSize={10} tick={{ fill: '#888' }} axisLine={false} tickLine={false} />
                                                 <Tooltip
                                                     contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', fontSize: '12px', color: '#fff' }}
-                                                    itemStyle={{ color: '#ef7d00' }}
+                                                    itemStyle={{ color: '#fff' }}
                                                 />
                                                 <Area type="monotone" dataKey="litros" stroke="#ef7d00" fillOpacity={1} fill="url(#colorLitros)" />
                                             </AreaChart>
@@ -624,6 +623,7 @@ export function ReportesModule() {
                                                 <YAxis dataKey="patent" type="category" fontSize={9} tick={{ fill: '#ddd' }} width={70} />
                                                 <Tooltip
                                                     contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', fontSize: '12px', color: '#fff' }}
+                                                    itemStyle={{ color: '#fff' }}
                                                 />
                                                 <Bar dataKey="litros" fill="#0088FE" radius={[0, 4, 4, 0]} barSize={20} />
                                             </BarChart>
@@ -652,6 +652,7 @@ export function ReportesModule() {
                                                 <YAxis fontSize={10} tick={{ fill: '#888' }} axisLine={false} tickLine={false} />
                                                 <Tooltip
                                                     contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', fontSize: '12px', color: '#fff' }}
+                                                    itemStyle={{ color: '#fff' }}
                                                 />
                                                 <Bar dataKey="value" fill="#00C49F" radius={[4, 4, 0, 0]} />
                                             </BarChart>
@@ -682,6 +683,7 @@ export function ReportesModule() {
                                                     paddingAngle={5}
                                                     dataKey="value"
                                                     label={({ name, value }) => `${name}: ${value}`}
+                                                    labelLine={{ stroke: '#888' }}
                                                 >
                                                     {stats.chartDataByStatus.map((entry: any, index: number) => (
                                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -689,6 +691,7 @@ export function ReportesModule() {
                                                 </Pie>
                                                 <Tooltip
                                                     contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', fontSize: '12px', color: '#fff' }}
+                                                    itemStyle={{ color: '#fff' }}
                                                 />
                                             </PieChart>
                                         </ResponsiveContainer>
@@ -712,8 +715,8 @@ export function ReportesModule() {
                                     variant="destructive"
                                 />
                                 <KPICard
-                                    title="Almacenes Activos"
-                                    value={almacenes.length}
+                                    title="Valorización Total"
+                                    value={new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(stats.totalValorizacion)}
                                     icon={FileSpreadsheet}
                                     variant="success"
                                 />

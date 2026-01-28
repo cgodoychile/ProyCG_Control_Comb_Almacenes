@@ -6,139 +6,83 @@
 
 @layer base {
   :root {
-    /* Industrial dark theme - Fuel Management CRM */
-    --background: 220 20% 10%;
-    --foreground: 210 20% 95%;
-
-    --card: 220 18% 13%;
-    --card-foreground: 210 20% 95%;
-
-    --popover: 220 18% 13%;
-    --popover-foreground: 210 20% 95%;
-
-    /* Primary - Deep Industrial Blue */
-    --primary: 215 80% 55%;
-    --primary-foreground: 0 0% 100%;
-
-    /* Secondary - Steel Gray */
-    --secondary: 220 15% 20%;
-    --secondary-foreground: 210 20% 90%;
-
-    /* Muted - Subtle gray */
-    --muted: 220 15% 18%;
-    --muted-foreground: 215 15% 55%;
-
-    /* Accent - Fuel Orange/Amber */
-    --accent: 35 95% 55%;
-    --accent-foreground: 220 20% 10%;
-
-    /* Status Colors */
-    --success: 145 70% 45%;
-    --success-foreground: 0 0% 100%;
-
-    --warning: 45 95% 50%;
-    --warning-foreground: 220 20% 10%;
-
-    --destructive: 0 75% 55%;
-    --destructive-foreground: 0 0% 100%;
-
-    --critical: 0 85% 45%;
-    --critical-foreground: 0 0% 100%;
-
-    --border: 220 15% 22%;
-    --input: 220 15% 22%;
-    --ring: 215 80% 55%;
-
-    --radius: 0.625rem;
-
-    /* Custom gradients */
-    --gradient-fuel: linear-gradient(135deg, hsl(35 95% 55%) 0%, hsl(25 90% 45%) 100%);
-    --gradient-card: linear-gradient(180deg, hsl(220 18% 15%) 0%, hsl(220 18% 12%) 100%);
-    --gradient-header: linear-gradient(90deg, hsl(220 20% 10%) 0%, hsl(220 18% 14%) 100%);
-
-    /* Shadows */
-    --shadow-card: 0 4px 24px -4px hsla(0 0% 0% / 0.4);
-    --shadow-glow-accent: 0 0 20px -4px hsl(35 95% 55% / 0.3);
-    --shadow-glow-success: 0 0 20px -4px hsl(145 70% 45% / 0.3);
-    --shadow-glow-warning: 0 0 20px -4px hsl(45 95% 50% / 0.3);
-    --shadow-glow-critical: 0 0 20px -4px hsl(0 85% 45% / 0.3);
-
-    --sidebar-background: 220 20% 8%;
-    --sidebar-foreground: 210 20% 90%;
-    --sidebar-primary: 215 80% 55%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 15% 15%;
-    --sidebar-accent-foreground: 210 20% 95%;
-    --sidebar-border: 220 15% 18%;
-    --sidebar-ring: 215 80% 55%;
-  }
-
-  /* Light theme - Clean and Professional */
-  :root.light {
-    --background: 0 0% 98%;
-    --foreground: 220 20% 15%;
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
 
     --card: 0 0% 100%;
-    --card-foreground: 220 20% 15%;
+    --card-foreground: 222.2 84% 4.9%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 20% 15%;
+    --popover-foreground: 222.2 84% 4.9%;
 
-    /* Primary - Vibrant Blue */
-    --primary: 215 85% 50%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
 
-    /* Secondary - Light Gray */
-    --secondary: 210 15% 92%;
-    --secondary-foreground: 220 20% 20%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
 
-    /* Muted - Soft gray */
-    --muted: 210 15% 95%;
-    --muted-foreground: 215 15% 45%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
 
-    /* Accent - Warm Orange */
-    --accent: 35 90% 55%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
 
-    /* Status Colors */
-    --success: 145 65% 42%;
-    --success-foreground: 0 0% 100%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
 
-    --warning: 45 90% 50%;
-    --warning-foreground: 220 20% 15%;
+    --success: 142.1 70.6% 45.3%;
+    --success-foreground: 210 40% 98%;
 
-    --destructive: 0 70% 50%;
-    --destructive-foreground: 0 0% 100%;
+    --warning: 47.9 95.8% 51.8%;
+    --warning-foreground: 222.2 47.4% 11.2%;
 
-    --critical: 0 80% 45%;
-    --critical-foreground: 0 0% 100%;
+    --critical: 0 84.2% 60.2%;
+    --critical-foreground: 210 40% 98%;
 
-    --border: 220 15% 88%;
-    --input: 220 15% 88%;
-    --ring: 215 85% 50%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
 
-    --radius: 0.625rem;
+    --radius: 0.5rem;
+  }
 
-    /* Custom gradients - Light mode */
-    --gradient-fuel: linear-gradient(135deg, hsl(35 90% 55%) 0%, hsl(25 85% 50%) 100%);
-    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(210 15% 98%) 100%);
-    --gradient-header: linear-gradient(90deg, hsl(0 0% 98%) 0%, hsl(210 15% 96%) 100%);
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
 
-    /* Shadows - Light mode */
-    --shadow-card: 0 2px 12px -2px hsla(220 15% 30% / 0.1);
-    --shadow-glow-accent: 0 0 16px -4px hsl(35 90% 55% / 0.2);
-    --shadow-glow-success: 0 0 16px -4px hsl(145 65% 42% / 0.2);
-    --shadow-glow-warning: 0 0 16px -4px hsl(45 90% 50% / 0.2);
-    --shadow-glow-critical: 0 0 16px -4px hsl(0 80% 45% / 0.2);
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
 
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 220 20% 20%;
-    --sidebar-primary: 215 85% 50%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 210 15% 95%;
-    --sidebar-accent-foreground: 220 20% 20%;
-    --sidebar-border: 220 15% 88%;
-    --sidebar-ring: 215 85% 50%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --success: 142.1 70.6% 45.3%;
+    --success-foreground: 210 40% 98%;
+
+    --warning: 47.9 95.8% 51.8%;
+    --warning-foreground: 222.2 47.4% 11.2%;
+
+    --critical: 0 62.8% 30.6%;
+    --critical-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
   }
 
   /* Screen border for Day Mode */
@@ -162,6 +106,38 @@
       opacity: 1;
     }
   }
+
+  @keyframes float {
+
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+
+  @keyframes pulse-slow {
+
+    0%,
+    100% {
+      opacity: 0.5;
+    }
+
+    50% {
+      opacity: 0.8;
+    }
+  }
+
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
+  }
+
+  .animate-pulse-slow {
+    animation: pulse-slow 4s ease-in-out infinite;
+  }
 }
 
 
@@ -173,6 +149,18 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-family: 'Inter', system-ui, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+  }
+
+  /* Prevent selection on UI elements for native feel */
+  button,
+  nav,
+  [role="button"],
+  .nav-item {
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
   }
 
   .font-mono {
@@ -301,5 +289,25 @@
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+  }
+
+  /* 3D and Glow Utilities */
+  .perspective-1000 {
+    perspective: 1000px;
+  }
+
+  .rotate-x-1 {
+    transform: rotateX(1deg);
+  }
+
+  .shadow-glow-critical {
+    box-shadow: 0 0 25px rgba(239, 68, 68, 0.4);
+  }
+
+  .shadow-3d {
+    box-shadow:
+      0 1px 1px rgba(0, 0, 0, 0.1),
+      0 10px 20px rgba(0, 0, 0, 0.05),
+      0 20px 40px rgba(0, 0, 0, 0.05);
   }
 }

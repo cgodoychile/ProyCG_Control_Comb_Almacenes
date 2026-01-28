@@ -39,37 +39,47 @@ export const agendamientosApi = {
 
 // Productos Almacen API
 export const productosAlmacenApi = {
-    getAll: () => apiFetch<any[]>('productos', 'getAll'),
+    getAll: () => apiFetch<any[]>('productos_almacen', 'getAll'),
     getAllByAlmacen: (almacenId: string) =>
-        apiFetch<any[]>('productos', 'getAll', { params: { almacenId, _t: Date.now().toString() } }),
-    getById: (id: string) => apiFetch<any>('productos', 'getById', { id }),
+        apiFetch<any[]>('productos_almacen', 'getAll', { params: { almacenId, _t: Date.now().toString() } }),
+    getById: (id: string) => apiFetch<any>('productos_almacen', 'getById', { id }),
     create: (data: any) => {
-        console.error('🚀 API SERVICE - Creating Product:', data);
-        return apiFetch<any>('productos', 'create', { method: 'POST', body: data });
+        return apiFetch<any>('productos_almacen', 'create', { method: 'POST', body: data });
     },
     update: (id: string, data: any) => {
-        console.error('🚀 API SERVICE - Updating Product:', { id, data });
-        // Enviamos el ID tanto en la URL como en el cuerpo para máxima compatibilidad
-        return apiFetch<any>('productos', 'update', { method: 'POST', id, body: { ...data, id } });
+        return apiFetch<any>('productos_almacen', 'update', { method: 'POST', id, body: { ...data, id } });
     },
     delete: (id: string, body: any = {}) =>
-        apiFetch<void>('productos', 'delete', { method: 'POST', id, body }),
+        apiFetch<void>('productos_almacen', 'delete', { method: 'POST', id, body }),
 };
 
 // Movimientos Almacen API
 export const movimientosAlmacenApi = {
-    ...createCrudApi<MovimientoAlmacen>('movimientos'),
+    ...createCrudApi<MovimientoAlmacen>('movimientos_almacen'),
     getByAlmacen: (almacenId: string) =>
-        apiFetch<MovimientoAlmacen[]>('movimientos', 'getAll', { params: { almacenId } }),
+        apiFetch<MovimientoAlmacen[]>('movimientos_almacen', 'getAll', { params: { almacenId } }),
 };
 
 export const personasApi = createCrudApi<Persona>('personas');
 export const vehiculosApi = createCrudApi<Vehiculo>('vehiculos');
 export const estanquesApi = createCrudApi<Estanque>('estanques');
 export const consumosApi = createCrudApi<ConsumoRegistro>('consumos');
-export const activosApi = createCrudApi<Activo>('activos');
+export const activosApi = {
+    ...createCrudApi<Activo>('activos'),
+    generateCargo: (activoId: string, data: any) =>
+        apiFetch<any>('actas', 'generate_cargo', { method: 'POST', body: { ...data, activoId } }),
+};
 export const mantencionesApi = createCrudApi<Mantencion>('mantenciones');
 export const almacenesApi = createCrudApi<Almacen>('almacenes');
 export const alertasApi = createCrudApi<Alerta>('alertas');
-export const auditoriaApi = createCrudApi<AuditoriaLog>('auditoria');
+export const auditoriaApi = createCrudApi<AuditoriaLog>('alertas'); // Usamos alertas como auditoría
 export const usuariosApi = createCrudApi<Usuario>('usuarios');
+export const actasApi = {
+    getAll: () => apiFetch<any[]>('actas', 'get_all'),
+    generateCargo: (data: any) => apiFetch<any>('actas', 'generate_cargo', { method: 'POST', body: data }),
+};
+
+// Dashboard API
+export const dashboardApi = {
+    getStats: () => apiFetch<any>('dashboard', 'getStats'),
+};

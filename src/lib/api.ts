@@ -1,6 +1,6 @@
 export const API_CONFIG = {
   // Use environment variable or fallback to production URL
-  BASE_URL: import.meta.env.VITE_API_URL || 'https://script.google.com/macros/s/AKfycbxmZOYOHVY8v1-ohm4tU_oVQnQ8UZJ6Mo3F2aZt20dJ13O7g_CJY9eWVfsxS7dYlyKH/exec',
+  BASE_URL: import.meta.env.VITE_API_URL || 'https://script.google.com/macros/s/AKfycbyLs5nQmEdZlnQTwU9UWKYwz39yntfSOBrowHxQultlfjCPO1ONqKG-NUiTcWRF5QcTkA/exec',
   TIMEOUT: 30000, // 30 seconds
 };
 

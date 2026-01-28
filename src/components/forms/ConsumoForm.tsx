@@ -63,12 +63,9 @@ export function ConsumoForm({
     const isCamioneta = selectedVehicleObj?.tipo?.toLowerCase().includes('camioneta') ||
         selectedVehicleObj?.nombre?.toLowerCase().includes('camioneta');
 
-    // Alerta critica: Si consume > 80L. Si es Camioneta y > 80L también alerta (redundante pero explicito para el usuario)
-    const showJustificationWarning = litrosUsados > 80 || (isCamioneta && litrosUsados > 60); // Ejemplo: Umbral menor para camionetas?
-    // El usuario dijo "Agregar camioneta a la línea de alerta critica".
-    // Si la alerta es > 80L, una camioneta DEFINITIVAMENTE debe alertar.
-    // Voy a mantener > 80L como la regla general crítica, pero forzaré la UI a ser explícita.
-    const isCritical = litrosUsados > 80;
+    // Alerta critica: Si consume >= 80L. Si es Camioneta y > 60L también alerta.
+    const showJustificationWarning = litrosUsados >= 80 || (isCamioneta && litrosUsados > 60);
+    const isCritical = litrosUsados >= 80;
 
     // Estado para controlar el modo de ingreso manual
     const [isIngresoManual, setIsIngresoManual] = useState(false);
@@ -245,12 +242,20 @@ export function ConsumoForm({
                         </Alert>
                     )}
                     {showJustificationWarning && (
-                        <Alert variant="destructive">
-                            <AlertCircle className="h-4 w-4" />
-                            <AlertDescription>
-                                ⚠️ Consumo Crítico: Mayor a 80L (Camiones/Maquinaria) o Camionetas. Requiere justificación.
-                            </AlertDescription>
-                        </Alert>
+                        <div className="mt-4 p-4 border-2 border-destructive bg-destructive/5 rounded-lg flex flex-col items-center gap-3 animate-pulse">
+                            <img
+                                src="/camioneta.png"
+                                alt="Alerta Camioneta"
+                                className="w-24 h-auto object-contain drop-shadow-md"
+                            />
+                            <Alert variant="destructive" className="border-none bg-transparent p-0">
+                                <AlertCircle className="h-5 w-5" />
+                                <AlertDescription className="text-center font-bold">
+                                    ⚠️ CONSUMO CRÍTICO DETECTADO: Mayor a 80L o Camioneta ({'>'}60L).
+                                    <span className="block mt-1 uppercase text-xs">Se requiere justificación obligatoria (mínimo 10 caracteres).</span>
+                                </AlertDescription>
+                            </Alert>
+                        </div>
                     )}
                 </div>
 

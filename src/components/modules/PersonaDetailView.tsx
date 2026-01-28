@@ -9,9 +9,12 @@ import {
     TrendingUp,
     History,
     Calendar,
-    Target
+    Target,
+    FileText
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
+import { actasApi } from '@/lib/apiService';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { KPICard } from '@/components/dashboard/KPICard';
 import { cn } from '@/lib/utils';
@@ -24,6 +27,7 @@ interface PersonaDetailViewProps {
 }
 
 export function PersonaDetailView({ persona, onBack }: PersonaDetailViewProps) {
+    const { toast } = useToast();
     const [activeTab, setActiveTab] = useState('actividad');
     const [modalOpen, setModalOpen] = useState(false);
     const [modalType, setModalType] = useState<'consumos' | 'movimientos' | 'vehiculos' | null>(null);
@@ -145,6 +149,31 @@ export function PersonaDetailView({ persona, onBack }: PersonaDetailViewProps) {
                 <div>
                     <h2 className="text-2xl font-bold">{persona.nombreCompleto}</h2>
                     <p className="text-muted-foreground">{persona.rol} en {persona.empresa}</p>
+                </div>
+                <div className="ml-auto flex gap-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2 border-accent text-accent hover:bg-accent/10"
+                        onClick={async () => {
+                            // Encontrar un activo a cargo para ejemplo o pedir selección
+                            // Por ahora, generamos una general para la persona
+                            const res = await actasApi.generateCargo({
+                                responsable: persona.nombreCompleto,
+                                cargo: persona.rol,
+                                empresa: persona.empresa,
+                                fecha: new Date().toISOString()
+                            });
+                            if (res.success) {
+                                toast({ title: "✅ Hoja de Cargo Generada", description: res.data.message || "El documento ha sido registrado en el sistema." });
+                            } else {
+                                toast({ variant: "destructive", title: "❌ Error", description: res.message });
+                            }
+                        }}
+                    >
+                        <FileText className="w-4 h-4" />
+                        GENERAR HOJA DE CARGO
+                    </Button>
                 </div>
             </div>
 

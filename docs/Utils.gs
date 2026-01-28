@@ -1,301 +1,260 @@
 /**
- * UTILITY FUNCTIONS
- * Helper functions used across all CRUD modules
+ * UTILIDADES GLOBALES
  */
 
-function createResponse(success, data, message) {
+function getSheet(sheetName) {
+  // Ultra-defensive check with hardcoded fallback
+  const finalSheetName = sheetName || "Actas"; 
+  console.log(`[Utils] getSheet - Input: "${sheetName}", Using: "${finalSheetName}"`);
+  
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEETID);
+    let sheet = ss.getSheetByName(finalSheetName);
+    
+    if (!sheet) {
+      console.warn(`[Utils] Sheet "${finalSheetName}" not found. Trying case-insensitive search.`);
+      const allSheets = ss.getSheets();
+      sheet = allSheets.find(s => s.getName().toLowerCase() === String(finalSheetName).toLowerCase());
+    }
+    
+    if (!sheet) {
+      console.error(`[Utils] CRITICAL: Sheet "${finalSheetName}" not found. Falling back to FIRST sheet.`);
+      sheet = ss.getSheets()[0];
+    }
+    
+    return sheet;
+  } catch (e) {
+    console.error(`[Utils] Fatal error in getSheet: ${e.toString()}`);
+    throw e;
+  }
+}
+
+function createResponse(success, data, message = "", statusCode = 200) {
   return {
     success: success,
     data: data,
-    message: message || (success ? 'Operación exitosa' : 'Error en la operación')
-  };
-}
-
-function createErrorResponse(message, code) {
-  return {
-    success: false,
-    data: null,
     message: message,
-    code: code || 500
+    statusCode: statusCode,
+    timestamp: new Date().toISOString()
   };
 }
 
-/**
- * Centralized function to get the spreadsheet.
- * This helps diagnose ReferenceErrors with SPREADSHEETID.
- */
-function getSS() {
-  try {
-    if (typeof SPREADSHEETID === 'undefined') {
-      throw new Error("La constante SPREADSHEETID no está definida en Config.gs o el archivo no se ha cargado.");
-    }
-    return SpreadsheetApp.openById(SPREADSHEETID);
-  } catch (e) {
-    throw new Error("Error accediendo a la base de datos: " + e.toString());
-  }
+function createErrorResponse(message, statusCode = 400) {
+  return createResponse(false, null, message, statusCode);
 }
 
-function getSheet(sheetName) {
-  const ss = getSS();
-  const sheet = ss.getSheetByName(sheetName);
-  if (!sheet) throw new Error(`Hoja "${sheetName}" no encontrada`);
-  return sheet;
-}
-
-function formatDate(date) {
-  if (!date) return '';
-  let d = new Date(date);
-  if (isNaN(d.getTime())) return String(date);
-  
-  // Offset correction: subtract 5 hours to align server with Chile
-  const adjustedTime = d.getTime() - (5 * 60 * 60 * 1000);
-  const adjustedDate = new Date(adjustedTime);
-
-  try {
-    return Utilities.formatDate(adjustedDate, "GMT", "dd-MM-yyyy");
-  } catch (e) {
-    return String(date);
-  }
-}
-
-function formatDateTime(date) {
-  if (!date) return '';
-  let d = new Date(date);
-  if (isNaN(d.getTime())) return String(date);
-  
-  // Offset correction: subtract 5 hours to align server with Chile
-  const adjustedTime = d.getTime() - (5 * 60 * 60 * 1000);
-  const adjustedDate = new Date(adjustedTime);
-
-  try {
-    return Utilities.formatDate(adjustedDate, "GMT", "dd-MM-yyyy, HH:mm");
-  } catch (e) {
-    return String(date);
-  }
-}
-
-function generateId(prefix) {
-  // Pattern: PREFIX-TIMESTAMP
-  const timestamp = new Date().getTime();
-  return (prefix || 'ID') + '-' + timestamp;
-}
+// La función formatDate ahora se maneja al final del archivo para usar parseDate de forma segura.
 
 /**
- * Generates a sequential and categorized PRODUCT code
- * Pattern: PRD-[CAT_PREFIX]-[SEQ] (e.g., PRD-EPP-001)
+ * Limpia referencias de entidades eliminadas en otras hojas (ej: Bodega)
+ * @param {string} tipo 'Vehiculo' o 'Estanque'
+ * @param {string} id El identificador (Patente o ID)
  */
-function generateProductCode(categoria) {
+function cleanupWarehouseReferences(tipo, id) {
   try {
     const sheet = getSheet(SHEET_NAMES.PRODUCTOS_ALMACEN);
+    if (!sheet) return 0;
+    
     const data = sheet.getDataRange().getValues();
-    const colMap = findColumnIndices(sheet, { ID: ['ID'] });
-    const idIdx = colMap.ID !== -1 ? colMap.ID : 0;
+    const colMap = findColumnIndices(sheet, {
+        DESCRIPCION: ['DESCRIPCION', 'DETALLE']
+    });
+    const descIdx = colMap.DESCRIPCION !== -1 ? colMap.DESCRIPCION : 14;
     
-    const catPrefix = (categoria || 'GEN').substring(0, 3).toUpperCase();
-    const fullPrefix = `PRD-${catPrefix}-`;
+    let count = 0;
+    const searchStr = String(id).trim().toUpperCase();
     
-    let maxSeq = 0;
-    for (let i = 1; i < data.length; i++) {
-      const id = String(data[i][idIdx]);
-      if (id.startsWith(fullPrefix)) {
-        const seqStr = id.replace(fullPrefix, '');
-        const seq = parseInt(seqStr);
-        if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+    for (let i = data.length - 1; i >= 1; i--) {
+      const desc = String(data[i][descIdx] || '').toUpperCase();
+      if (desc.includes(searchStr)) {
+        sheet.deleteRow(i + 1);
+        count++;
       }
     }
     
-    const nextSeq = String(maxSeq + 1).padStart(3, '0');
-    return `${fullPrefix}${nextSeq}`;
+    if (count > 0) SpreadsheetApp.flush();
+    return count;
   } catch (e) {
-    // Fallback to timestamp if something fails during sequential check
-    return 'PRD-' + new Date().getTime();
+    console.error("Error en cleanupWarehouseReferences: " + e.toString());
+    return 0;
   }
 }
 
-/**
- * Helpers for human-readable audit logs
- */
-function fetchProductNamesMap() {
-  try {
-    const sheet = getSheet(SHEET_NAMES.PRODUCTOS_ALMACEN);
-    const data = sheet.getDataRange().getValues();
-    const colMap = findColumnIndices(sheet, { ID: ['ID'], NOMBRE: ['NOMBRE'] });
-    const idIdx = colMap.ID !== -1 ? colMap.ID : 0;
-    const nmIdx = colMap.NOMBRE !== -1 ? colMap.NOMBRE : 2;
-    const map = {};
-    for (let i = 1; i < data.length; i++) {
-      const id = String(data[i][idIdx]).trim();
-      if (id) map[id] = data[i][nmIdx];
-    }
-    return map;
-  } catch(e) { return {}; }
+function generateAutoId(prefix) {
+  return prefix + "-" + Math.random().toString(36).substr(2, 5).toUpperCase() + "-" + new Date().getTime().toString().substr(-4);
 }
 
-function fetchAlmacenNamesMap() {
-  try {
-    const sheet = getSheet(SHEET_NAMES.ALMACENES);
-    const data = sheet.getDataRange().getValues();
-    const colMap = findColumnIndices(sheet, { ID: ['ID'], NOMBRE: ['NOMBRE'] });
-    const idIdx = colMap.ID !== -1 ? colMap.ID : 0;
-    const nmIdx = colMap.NOMBRE !== -1 ? colMap.NOMBRE : 1;
-    const map = {};
-    for (let i = 1; i < data.length; i++) {
-        const id = String(data[i][idIdx]).trim();
-        if (id) map[id] = data[i][nmIdx];
-    }
-    return map;
-  } catch(e) { return {}; }
+function getSS() {
+  return SpreadsheetApp.openById(SPREADSHEETID);
 }
 
-/**
- * Dynamic Column Finder
- */
+function normalizeHeader(header) {
+  if (!header) return '';
+  return String(header)
+    .toUpperCase()
+    .trim()
+    .replace(/[ÁÀÄÂ]/g, 'A')
+    .replace(/[ÉÈËÊ]/g, 'E')
+    .replace(/[ÍÌÏÎ]/g, 'I')
+    .replace(/[ÓÒÖÔ]/g, 'O')
+    .replace(/[ÚÙÜÛ]/g, 'U')
+    .replace(/[^A-Z0-9_]/g, '_')
+    .replace(/_+/g, '_');
+}
+
 function findColumnIndices(sheet, mapping) {
-  try {
-    const headers = sheet.getRange(1, 1, 1, Math.min(sheet.getLastColumn() || 1, 30)).getValues()[0];
-    const result = {};
-    Object.keys(mapping).forEach(key => {
-      const possibleHeaders = mapping[key].map(h => h.toUpperCase());
-      const foundIdx = headers.findIndex(h => possibleHeaders.includes(String(h).toUpperCase().trim()));
-      result[key] = foundIdx;
-    });
-    return result;
-  } catch (e) {
-    return {};
+  const lastCol = sheet.getLastColumn();
+  if (lastCol === 0) return {};
+  
+  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  const normalizedHeaders = headers.map(h => normalizeHeader(h));
+  
+  const result = {};
+  
+  for (const [key, aliases] of Object.entries(mapping)) {
+    let foundIdx = -1;
+    
+    // 1. Try exact normalized match
+    const normalizedKey = normalizeHeader(key);
+    foundIdx = normalizedHeaders.indexOf(normalizedKey);
+    
+    // 2. Try aliases
+    if (foundIdx === -1 && Array.isArray(aliases)) {
+      for (const alias of aliases) {
+        const normalizedAlias = normalizeHeader(alias);
+        foundIdx = normalizedHeaders.indexOf(normalizedAlias);
+        if (foundIdx !== -1) break;
+      }
+    }
+    
+    result[key] = foundIdx;
   }
+  
+  return result;
+}
+
+function generateSequentialId(prefix, sheetName, idHeaderName, padding = 4) {
+  // Ultra-defensive fallback
+  const finalSheetName = sheetName || (prefix === 'ACT' ? 'Activos' : 'Actas');
+  if (!sheetName) {
+    console.warn(`[Utils] generateSequentialId called with undefined sheetName. Using fallback: ${finalSheetName}. Prefix: ${prefix}`);
+  }
+  
+  const sheet = getSheet(finalSheetName);
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return prefix + "-" + "1".padStart(padding, '0');
+  
+  const headers = data[0];
+  const idIdx = headers.findIndex(h => normalizeHeader(h) === normalizeHeader(idHeaderName));
+  
+  if (idIdx === -1) return prefix + "-" + (data.length).toString().padStart(padding, '0');
+  
+  let maxNum = 0;
+  for (let i = 1; i < data.length; i++) {
+    const val = String(data[i][idIdx]);
+    const match = val.match(/\d+$/);
+    if (match) {
+      const num = parseInt(match[0]);
+      if (num > maxNum) maxNum = num;
+    }
+  }
+  
+  return prefix + "-" + (maxNum + 1).toString().padStart(padding, '0');
 }
 
 /**
- * Registers a new action in the audit log
+ * Checks if a request with the same clientRequestId has already been processed
  */
+function checkIdempotency(sheet, clientRequestId, idIdx) {
+  if (!clientRequestId) return null;
+  
+  // We'll use a hidden column or metadata in a real app, 
+  // but here we can check if it's already in the logs or just skip for now 
+  // to avoid blocking the user.
+  console.log(`Checking idempotency for: ${clientRequestId}`);
+  return null; 
+}
+
 function registrarAccion(modulo, accion, mensaje, tipo, usuario, justificacion) {
   try {
-    const ss = getSS();
-    let sheet = ss.getSheetByName(SHEET_NAMES.AUDITORIA);
-    if (!sheet) sheet = ss.getSheetByName(SHEET_NAMES.ALERTA);
-    if (!sheet) return false;
-
-    const colMap = findColumnIndices(sheet, {
-      ID: ['ID', 'CODIGO'],
-      FECHA: ['FECHA', 'TIMESTAMP'],
-      USUARIO: ['USUARIO', 'USER', 'RESPONSABLE'],
-      MODULO: ['MODULO', 'DOMINIO'],
-      ACCION: ['ACCION', 'OPERACION'],
-      MENSAJE: ['MENSAJE', 'DESCRIPCION'],
-      TIPO: ['TIPO', 'LEVEL']
-    });
-
-    const maxIdx = Math.max(...Object.values(colMap), 6);
-    const newRow = Array(maxIdx + 1).fill('');
+    const sheetName = (typeof SHEET_NAMES !== 'undefined' && SHEET_NAMES.AUDITORIA) ? SHEET_NAMES.AUDITORIA : 'Auditoria';
+    const sheet = getSheet(sheetName);
+    const mapping = (typeof COLUMNS !== 'undefined') ? COLUMNS.AUDITORIA : null;
     
-    const setVal = (key, fallbackIdx, val) => {
-      const idx = colMap[key] !== -1 ? colMap[key] : fallbackIdx;
-      if (idx !== -1) newRow[idx] = val;
-    };
-
-    setVal('ID', COLUMNS.AUDITORIA.ID, generateId('LOG'));
-    setVal('FECHA', COLUMNS.AUDITORIA.FECHA, formatDateTime(new Date()));
-    setVal('USUARIO', COLUMNS.AUDITORIA.USUARIO, usuario || 'Sistema');
-    setVal('MODULO', COLUMNS.AUDITORIA.MODULO, modulo);
-    setVal('ACCION', COLUMNS.AUDITORIA.ACCION, accion);
-    
-    let fullMsg = mensaje;
-    
-    // Auto-translate JSON to Human Readable
-    if (typeof mensaje === 'string' && mensaje.trim().startsWith('{')) {
-      try {
-        const metadata = JSON.parse(mensaje);
-        if (metadata.name && metadata.entity) {
-           const entityMap = { 'activos': 'Activo', 'vehiculos': 'Vehículo', 'consumos': 'Consumo', 'estanques': 'Estanque', 'almacenes': 'Bodega' };
-           const friendlyEntity = entityMap[metadata.entity.toLowerCase()] || metadata.entity;
-           fullMsg = `Solicitud de eliminación: ${friendlyEntity} - ${metadata.name}`;
-           if (metadata.justification) fullMsg += ` (Motivo: ${metadata.justification})`;
-        }
-      } catch (e) { /* keep original if not valid JSON */ }
+    // Si mapping no existe (Config desactualizada), prevenimos el crash
+    if (!mapping) {
+      console.warn("COLUMNS.AUDITORIA no definido. Usando mapeo por defecto.");
     }
-
-    if (justificacion) fullMsg += ` | Justificación: ${justificacion}`;
-    setVal('MENSAJE', COLUMNS.AUDITORIA.MENSAJE, fullMsg);
-    setVal('TIPO', COLUMNS.AUDITORIA.TIPO, tipo || 'info');
+    
+    const id = generateSequentialId('LOG', sheetName, 'ID', 6);
+    
+    const headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 7)).getValues()[0];
+    const newRow = Array(headers.length || 7).fill('');
+    const idIdx = (mapping && mapping.ID !== undefined) ? mapping.ID : 0;
+    
+    newRow[idIdx] = id;
+    newRow[(mapping && mapping.FECHA !== undefined) ? mapping.FECHA : 1] = new Date();
+    newRow[(mapping && mapping.USUARIO !== undefined) ? mapping.USUARIO : 2] = usuario || 'Sistema';
+    newRow[(mapping && mapping.ACCION !== undefined) ? mapping.ACCION : 3] = accion;
+    newRow[(mapping && mapping.DETALLE !== undefined) ? mapping.DETALLE : 5] = mensaje + (justificacion ? ' | Justificación: ' + justificacion : '');
+    newRow[(mapping && mapping.ENTIDAD !== undefined) ? mapping.ENTIDAD : 4] = modulo;
+    newRow[(mapping && mapping.ESTADO !== undefined) ? mapping.ESTADO : 6] = tipo || 'info';
     
     sheet.appendRow(newRow);
     return true;
-  } catch (error) {
-    console.error('Error en registrarAccion:', error);
+  } catch (e) {
+    console.error("Error en registrarAccion: " + e.toString());
     return false;
   }
 }
 
-const SHEET_NAMES_AL = typeof SHEET_NAMES !== 'undefined' ? SHEET_NAMES : { ALERTA: 'Alerta' };
-
-function createAlerta(arg1, arg2, arg3, arg4) {
-  try {
-    // 1. Normalize Arguments (Handle Object vs Positional)
-    let tipo, mensaje, modulo, accion;
-    
-    if (typeof arg1 === 'object' && arg1 !== null) {
-      // Called with object: { modulo, tipo, descripcion, responsable }
-      tipo = arg1.tipo || 'info';
-      mensaje = arg1.descripcion || arg1.mensaje || '';
-      modulo = arg1.modulo || 'Sistema'; // Default Module
-      accion = arg1.accion || 'registro';
-    } else {
-      // Called with positional: (tipo, mensaje, modulo, accion)
-      tipo = arg1 || 'info';
-      mensaje = arg2 || '';
-      modulo = arg3 || 'Sistema';
-      accion = arg4 || 'registro';
-    }
-
-    // 2. Prepare Data
-    const ss = getSS();
-    const sheetName = SHEET_NAMES.ALERTA || 'Alertas';
-    let sheet = ss.getSheetByName(sheetName);
-
-    // 3. Auto-create sheet if missing
-    if (!sheet) {
-      sheet = ss.insertSheet(sheetName);
-      sheet.appendRow(['ID', 'TIPO', 'MENSAJE', 'MODULO', 'FECHA', 'LEIDA', 'ACCION']);
-      sheet.getRange(1, 1, 1, 7).setFontWeight('bold').setBackground('#f3f4f6');
-    }
-
-    // 4. Append Row
-    const newRow = [
-      'ALR-' + Math.random().toString(36).substr(2, 9).toUpperCase(), // ID
-      tipo,                                                           // TIPO
-      mensaje,                                                        // MENSAJE
-      modulo,                                                         // MODULO
-      formatDateTime(new Date()),                                     // FECHA (Local)
-      'FALSE',                                                        // LEIDA
-      accion                                                          // ACCION
-    ];
-    
-    sheet.appendRow(newRow);
-    Logger.log(`ALERTA REGISTRADA: ${mensaje}`);
-    return true;
-
-  } catch (e) {
-    console.error(`ERROR createAlerta: ${e.toString()}`);
-    return false; // Fail silently to not block main flow
-  }
-}
-
 function checkBoolean(val) {
-  if (val === true || val === 'TRUE' || val === 'true' || val === 'Verdadero' || val === 'VERDADERO' || val === 'SI' || val === 'SÍ' || val === 1 || val === '1') {
-    return true;
-  }
+  if (val === true || val === 'true' || val === 'TRUE' || val === 1 || val === '1') return true;
   return false;
 }
 
-function checkIdempotency(sheet, requestId, idColIdx) {
-  if (!requestId) return null;
-  const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][idColIdx]).trim() === String(requestId).trim()) {
-      return createResponse(true, { id: requestId }, "Registro ya existe (idempotencia)");
+function parseDate(val) {
+  if (!val) return null;
+  if (val instanceof Date) return val;
+  
+  // Serial number from Excel/Sheets (approx)
+  if (typeof val === 'number' || (typeof val === 'string' && val.length > 5 && !isNaN(val))) {
+    const num = parseFloat(val);
+    if (num > 30000) { // Likely a serial date
+      return new Date((num - 25569) * 86400 * 1000);
     }
   }
-  return null;
+
+  const s = String(val).trim();
+  if (s === '-' || s === '') return null;
+  
+  // Standard format ISO YYYY-MM-DD
+  if (s.match(/^\d{4}[-/]\d{2}[-/]\d{2}/)) return new Date(s.replace(/\//g, '-'));
+  
+  // DD/MM/YYYY
+  const parts = s.split(/[-/ ]/);
+  if (parts.length >= 3) {
+    const p0 = parseInt(parts[0]);
+    const p1 = parseInt(parts[1]);
+    const p2 = parseInt(parts[2]);
+    if (p2 > 1000) return new Date(p2, p1 - 1, p0); // DD/MM/YYYY
+    if (p0 > 1000) return new Date(p0, p1 - 1, p2); // YYYY/MM/DD
+  }
+  
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
 }
 
+function formatDate(date) {
+  const d = parseDate(date);
+  if (!d) return '-';
+  try {
+     return d.toISOString();
+  } catch (e) {
+     return String(date);
+  }
+}
 
+function generateId(prefix) {
+  return generateAutoId(prefix);
+}

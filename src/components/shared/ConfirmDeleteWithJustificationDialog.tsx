@@ -84,11 +84,27 @@ export function ConfirmDeleteWithJustificationDialog({
                     <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                         Motivo de la eliminación <span className="text-destructive">*</span>
                     </label>
+
+                    <div className="flex flex-wrap gap-2 mb-2">
+                        {['Dado de Baja', 'Pérdida o Robo', 'Traslado Definitivo', 'Error de Registro', 'Obsolescencia'].map((reason) => (
+                            <Button
+                                key={reason}
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="text-[10px] h-7 px-2"
+                                onClick={() => setJustification(reason)}
+                            >
+                                {reason}
+                            </Button>
+                        ))}
+                    </div>
+
                     <Textarea
-                        placeholder="Escriba la causa de la eliminación aquí..."
+                        placeholder="Escriba la causa detallada aquí..."
                         value={justification}
                         onChange={(e) => setJustification(e.target.value)}
-                        className="min-h-[100px]"
+                        className="min-h-[80px]"
                     />
 
                     {checkboxes.length > 0 && (

@@ -37,12 +37,21 @@ export function ProductTrackingDialog({ isOpen, onClose, producto, movimientos, 
                 // Since this useMemo is at top, we can't use the function defined below. 
                 // Let's rely on standard ID sort if dates are equal, or just parse safely.
                 const getDate = (dStr: string) => {
-                    if (!dStr) return 0;
-                    if (typeof dStr === 'string' && dStr.includes('-') && dStr.split('-')[2].length === 4) {
-                        const p = dStr.split('-');
-                        return new Date(parseInt(p[2]), parseInt(p[1]) - 1, parseInt(p[0])).getTime();
+                    if (!dStr || typeof dStr !== 'string') return 0;
+                    // Format: dd-mm-yyyy or dd-mm-yyyy hh:mm
+                    if (dStr.includes('-')) {
+                        const parts = dStr.split('-');
+                        if (parts.length >= 3 && parts[2].substring(0, 4).length === 4) {
+                            const year = parseInt(parts[2].substring(0, 4));
+                            const month = parseInt(parts[1]) - 1;
+                            const day = parseInt(parts[0]);
+                            if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+                                return new Date(year, month, day).getTime();
+                            }
+                        }
                     }
-                    return new Date(dStr).getTime();
+                    const d = new Date(dStr);
+                    return isNaN(d.getTime()) ? 0 : d.getTime();
                 };
                 return getDate(b.fecha) - getDate(a.fecha);
             });
@@ -62,15 +71,20 @@ export function ProductTrackingDialog({ isOpen, onClose, producto, movimientos, 
 
         // Iterate through all movements for this product
         productMovements.forEach(m => {
+            if (!m || !m.tipo) return; // Skip invalid movements
+
             const responsable = m.responsable || 'Sin Responsable';
-            const tipo = m.tipo.toLowerCase();
+            const tipo = String(m.tipo).toLowerCase();
             const cantidad = Number(m.cantidad) || 0;
 
             if (!assignments[responsable]) {
                 assignments[responsable] = { responsable, cantidad: 0, ultimaFecha: m.fecha, earliestDueDate: '' };
             }
 
-            if (new Date(m.fecha) > new Date(assignments[responsable].ultimaFecha)) {
+            // Safe date comparison
+            const mDate = new Date(m.fecha);
+            const uDate = new Date(assignments[responsable].ultimaFecha);
+            if (!isNaN(mDate.getTime()) && (isNaN(uDate.getTime()) || mDate > uDate)) {
                 assignments[responsable].ultimaFecha = m.fecha;
             }
 
@@ -78,10 +92,10 @@ export function ProductTrackingDialog({ isOpen, onClose, producto, movimientos, 
                 assignments[responsable].cantidad += cantidad;
                 // Track earliest due date for active loans
                 if (m.fechaDevolucion) {
-                    // logic: if we have a due date, store it. 
-                    // Simplistic: if we have multiple exits, we keep the earliest one that hasn't been fully returned? 
-                    // Complex to track "which specific unit returned", so just keeping the earliest seen due date of any exit for this person.
-                    if (!assignments[responsable].earliestDueDate || new Date(m.fechaDevolucion) < new Date(assignments[responsable].earliestDueDate)) {
+                    const dDate = new Date(m.fechaDevolucion);
+                    const eDate = assignments[responsable].earliestDueDate ? new Date(assignments[responsable].earliestDueDate) : null;
+
+                    if (!isNaN(dDate.getTime()) && (!eDate || isNaN(eDate.getTime()) || dDate < eDate)) {
                         assignments[responsable].earliestDueDate = m.fechaDevolucion;
                     }
                 }

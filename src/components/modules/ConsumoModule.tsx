@@ -52,6 +52,7 @@ export function ConsumoModule() {
   const [isTankSelectionOpen, setIsTankSelectionOpen] = useState(false);
   const [showOnlyExcessive, setShowOnlyExcessive] = useState(false);
   const [selectedJustification, setSelectedJustification] = useState<any>(null);
+  const [showOnlyCriticalKPI, setShowOnlyCriticalKPI] = useState(false);
   const itemsPerPage = 50;
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -199,33 +200,12 @@ export function ConsumoModule() {
     if (!deleteTargetId) return;
     const devolverStock = checkboxesState?.devolverStock ?? true;
 
-    // Flow for EVERYONE: Send a deletion request
-    const consumo = consumosData.find(c => c.id === deleteTargetId);
-    const consumoName = consumo ? `${consumo.vehiculo} - ${consumo.litrosUsados}L` : deleteTargetId;
-
-    await execute(
-      auditoriaApi.create({
-        modulo: 'Consumos',
-        accion: 'solicitud_eliminacion',
-        mensaje: JSON.stringify({
-          entity: 'consumos',
-          id: deleteTargetId,
-          name: consumoName,
-          restoreStock: devolverStock,
-          justification: justification
-        }),
-        tipo: 'warning',
-        usuario: user?.email || 'Usuario',
-        justificacion: justification
-      }),
-      {
-        successMessage: "Solicitud de eliminación enviada para aprobación del administrador.",
-        onSuccess: () => {
-          setDeleteTargetId(null);
-          queryClient.invalidateQueries({ queryKey: ['activity-alerts'] });
-        }
-      }
-    );
+    // DIRECT DELETION (Bypass approval request)
+    await deleteMutation.mutateAsync({
+      id: deleteTargetId,
+      devolverStock,
+      justification
+    });
   };
 
   const handleSubmit = async (data: ConsumoFormData) => {
@@ -238,9 +218,37 @@ export function ConsumoModule() {
 
   // Helpers
   // Helpers
-  const formatDate = (dateString: string) => {
+  const parseSafeDate = (dateStr: any) => {
+    if (!dateStr) return new Date(0);
+    if (dateStr instanceof Date) return dateStr;
+
+    const s = String(dateStr);
+    // Manejar formato DD-MM-YYYY o DD/MM/YYYY
+    if (s.includes('-') || s.includes('/')) {
+      const parts = s.split(/[-/]/);
+      if (parts.length === 3) {
+        // Asumir DD/MM/YYYY si el primero es <= 31 y el último es un año
+        const p0 = parseInt(parts[0]);
+        const p1 = parseInt(parts[1]);
+        const p2 = parseInt(parts[2]);
+
+        if (p2 > 1000) { // DD/MM/YYYY
+          return new Date(p2, p1 - 1, p0);
+        } else if (p0 > 1000) { // YYYY/MM/DD
+          return new Date(p0, p1 - 1, p2);
+        }
+      }
+    }
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? new Date(0) : d;
+  };
+
+  const formatDate = (dateString: any) => {
     if (!dateString) return '-';
     try {
+      const date = parseSafeDate(dateString);
+      if (date.getTime() === 0) return String(dateString);
+
       return new Intl.DateTimeFormat('es-CL', {
         day: '2-digit',
         month: '2-digit',
@@ -249,9 +257,9 @@ export function ConsumoModule() {
         minute: '2-digit',
         hour12: false,
         timeZone: 'America/Santiago'
-      }).format(new Date(dateString));
+      }).format(date);
     } catch {
-      return '-';
+      return String(dateString);
     }
   };
 
@@ -277,8 +285,8 @@ export function ConsumoModule() {
       );
     }
 
-    if (showOnlyExcessive) {
-      data = data.filter(item => item.litrosUsados > 80);
+    if (showOnlyExcessive || showOnlyCriticalKPI) {
+      data = data.filter(item => item.litrosUsados >= 80);
     }
 
     if (fechaDesde && fechaHasta) {
@@ -291,9 +299,9 @@ export function ConsumoModule() {
       });
     }
 
-    // Sort by date desc
-    return data.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
-  }, [consumosData, searchTerm, fechaDesde, fechaHasta, showOnlyExcessive]);
+    // Sort by date desc using safe parser
+    return data.sort((a, b) => parseSafeDate(b.fecha).getTime() - parseSafeDate(a.fecha).getTime());
+  }, [consumosData, searchTerm, fechaDesde, fechaHasta, showOnlyExcessive, showOnlyCriticalKPI]);
 
   const totalPages = Math.ceil(filteredData.length / itemsPerPage);
   const paginatedData = filteredData.slice(
@@ -312,6 +320,67 @@ export function ConsumoModule() {
 
   return (
     <div className="space-y-6">
+      {/* Alerta de Consumo Crítico (Modernized 3D Style) - AL TOPE */}
+      {(() => {
+        const allCritical = consumosData.filter(c => c.litrosUsados >= 80);
+        const criticalPending = allCritical.filter(c =>
+          String(c.justificacion || '').trim().length < 10 && String(c.observaciones || '').trim().length < 10
+        );
+
+        if (allCritical.length === 0) return null;
+
+        return (
+          <div className="card-fuel p-4 border-l-4 border-l-critical bg-critical/5 rounded-xl shadow-sm mb-6 animate-in fade-in slide-in-from-top-4 duration-500">
+            <div className="flex flex-col sm:flex-row items-center gap-6">
+              {/* Imagen Compacta y Título */}
+              <div className="flex items-center gap-4 border-r border-border/50 pr-6">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-critical/20 rounded-full blur-xl animate-pulse"></div>
+                  <img
+                    src="/camioneta.png"
+                    alt="Alerta"
+                    className="w-20 h-auto drop-shadow-lg transform hover:scale-110 transition-transform duration-300"
+                  />
+                </div>
+                <div
+                  className="cursor-pointer group"
+                  onClick={() => setShowOnlyCriticalKPI(!showOnlyCriticalKPI)}
+                >
+                  <h3 className="text-lg font-black text-foreground tracking-tight underline decoration-critical/30 group-hover:text-critical transition-colors">
+                    CONSUMO <span className="text-critical uppercase text-xl">CRÍTICO</span>
+                  </h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <AlertTriangle className="h-3 w-3 text-critical animate-bounce" />
+                    <span className="text-[10px] font-mono font-bold text-muted-foreground">TOTAL REGISTROS: {allCritical.length}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Status y Acción */}
+              <div className="flex-1 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="text-sm text-foreground/80 font-medium max-w-md">
+                  Se han detectado {allCritical.length} cargas superiores a 80L que requieren revisión.
+                  {criticalPending.length > 0 && <span className="text-critical font-bold"> ({criticalPending.length} pendientes).</span>}
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    "gap-2 border-critical/30 hover:bg-critical/10 text-critical font-bold shadow-sm min-w-[200px]",
+                    showOnlyCriticalKPI ? "bg-critical text-white hover:bg-critical/90" : (criticalPending.length > 0 && "animate-pulse")
+                  )}
+                  onClick={() => setShowOnlyCriticalKPI(!showOnlyCriticalKPI)}
+                >
+                  <Search className="w-4 h-4" />
+                  {showOnlyCriticalKPI ? "MOSTRAR TODOS" : "VER ALERTAS CRÍTICAS"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
         <div>
@@ -323,12 +392,12 @@ export function ConsumoModule() {
         <div className="flex gap-2">
           <Button
             size="sm"
-            variant="outline"
-            className="gap-2 border-accent text-accent hover:bg-accent/10"
+            variant="default"
+            className="gap-2 bg-[#1e40af] text-white hover:bg-[#1e3a8a] font-bold shadow-md uppercase tracking-tight"
             onClick={() => setIsTankSelectionOpen(true)}
           >
             <FileText className="w-4 h-4" />
-            GENERAR FORMULARIO EXCEL
+            Generar Formulario Excel
           </Button>
           <ExportButton data={filteredData} filename="reporte-consumo" />
           {canEdit && (
@@ -344,100 +413,6 @@ export function ConsumoModule() {
         </div>
       </div>
 
-      {/* Dashboard Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-        <div className="md:col-span-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <KPICard
-            title="Total Litros Año Anterior"
-            value={`${consumosData
-              .filter(c => {
-                const year = new Date(c.fecha).getFullYear();
-                const lastYear = new Date().getFullYear() - 1;
-                return year === lastYear;
-              })
-              .reduce((acc, curr) => acc + (curr.litrosUsados || 0), 0)
-              .toLocaleString()} L`}
-            icon={TrendingDown}
-            variant="default"
-          />
-          <KPICard
-            title="Total Litros Año Actual"
-            value={`${consumosData
-              .filter(c => {
-                const year = new Date(c.fecha).getFullYear();
-                const currentYear = new Date().getFullYear();
-                return year === currentYear;
-              })
-              .reduce((acc, curr) => acc + (curr.litrosUsados || 0), 0)
-              .toLocaleString()} L`}
-            icon={TrendingUp}
-            variant="accent"
-          />
-          <KPICard
-            title="Total Litros Mes Actual"
-            value={`${consumosData
-              .filter(c => {
-                const date = new Date(c.fecha);
-                const now = new Date();
-                return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-              })
-              .reduce((acc, curr) => acc + (curr.litrosUsados || 0), 0)
-              .toLocaleString()} L`}
-            icon={Fuel}
-            variant="success"
-          />
-        </div>
-        <div className="md:col-span-1">
-          <KPICard
-            title="Alertas (>80L)"
-            value={filteredData.filter(d => d.litrosUsados > 80).length}
-            icon={AlertTriangle}
-            size="sm"
-            variant={filteredData.some(d => d.litrosUsados > 80) ? "warning" : "default"}
-          />
-        </div>
-      </div>
-
-      {filteredData.some(d => d.litrosUsados > 80) || showOnlyExcessive ? (
-        <div
-          onClick={() => setShowOnlyExcessive(!showOnlyExcessive)}
-          className={cn(
-            "relative flex items-center justify-between gap-3 px-6 py-4 rounded-xl border-2 transition-all cursor-pointer hover:shadow-lg overflow-hidden group mb-6 min-h-[120px]", // Increased height and padding
-            showOnlyExcessive
-              ? "bg-critical/20 border-critical"
-              : "bg-gradient-to-r from-critical/10 to-background border-critical/30 hover:border-critical/50"
-          )}
-        >
-          {/* Background Image Effect */}
-          <div className="absolute right-0 top-0 h-full w-[200px] opacity-10 pointer-events-none">
-            <img src="/camioneta.png" alt="Camioneta" className="h-full w-full object-cover mix-blend-overlay" />
-          </div>
-
-          <div className="flex items-center gap-6 z-10 w-full"> {/* Increased gap */}
-
-            {/* Thumbnail Image */}
-            <div className="hidden sm:block h-24 w-36 rounded-lg overflow-hidden border-2 border-critical/50 shadow-md flex-shrink-0 bg-white">
-              <img src="/camioneta.png" alt="Alerta Vehículo" className="h-full w-full object-contain" />
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className={cn("w-6 h-6 text-critical", showOnlyExcessive && "animate-pulse")} />
-                <p className="text-lg font-black text-critical uppercase leading-none tracking-tight">
-                  ALERTA: {filteredData.filter(d => d.litrosUsados > 80).length} CONSUMOS EXCESIVOS DETECTADOS
-                </p>
-              </div>
-              <p className="text-sm text-muted-foreground font-medium max-w-xl">
-                Se han registrado cargas superiores a 80 litros. Haga clic aquí para {showOnlyExcessive ? "ver todos los registros" : "filtrar y revisar estos casos críticos"}.
-              </p>
-            </div>
-          </div>
-
-          <div className="z-10 bg-critical text-critical-foreground px-4 py-2 rounded-full text-xs font-bold shadow-sm whitespace-nowrap group-hover:scale-105 transition-transform">
-            {showOnlyExcessive ? "MOSTRAR TODOS" : "FILTRAR ALERTAS"}
-          </div>
-        </div>
-      ) : null}
 
       {/* Filters */}
       <div className="flex flex-col md:flex-row gap-4 items-end">
@@ -462,7 +437,7 @@ export function ConsumoModule() {
       </div>
 
       {/* Data Table */}
-      < div className="card-fuel rounded-xl border border-border overflow-hidden" >
+      <div className="card-fuel rounded-xl border border-border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="data-table">
             <thead className="bg-secondary/50">
@@ -507,14 +482,14 @@ export function ConsumoModule() {
                         <span className="font-medium text-foreground">{registro.empresa || '-'}</span>
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className="text-[10px] text-muted-foreground uppercase">{registro.responsable || 'Sin asignar'}</span>
-                          {registro.litrosUsados > 80 && (
+                          {registro.litrosUsados >= 80 && (
                             <span className={cn(
                               "text-[8px] px-1.5 py-0 rounded-sm font-bold",
-                              (registro.observaciones?.length >= 10 || registro.justificacion?.length >= 10)
+                              (String(registro.observaciones || '').trim().length >= 10 || String(registro.justificacion || '').trim().length >= 10)
                                 ? "bg-success/10 text-success border border-success/20"
                                 : "bg-critical/10 text-critical border border-critical/20 animate-pulse"
                             )}>
-                              {(registro.observaciones?.length >= 10 || registro.justificacion?.length >= 10) ? "JUSTIFICADO" : "PENDIENTE"}
+                              {(String(registro.observaciones || '').trim().length >= 10 || String(registro.justificacion || '').trim().length >= 10) ? "JUSTIFICADO" : "PENDIENTE"}
                             </span>
                           )}
                         </div>
@@ -522,7 +497,7 @@ export function ConsumoModule() {
                     </td>
                     <td>
                       <span className="font-mono bg-secondary px-2 py-1 rounded">
-                        {registro.vehiculo || '-'}
+                        {String(registro.vehiculo || '').trim() || '-'}
                       </span>
                     </td>
                     <td className="text-muted-foreground">{registro.estanque || '-'}</td>
@@ -530,7 +505,7 @@ export function ConsumoModule() {
                       <span className={cn(
                         "font-mono font-medium",
                         registro.litrosUsados > 70 && "text-warning",
-                        registro.litrosUsados > 80 && "text-critical"
+                        registro.litrosUsados >= 80 && "text-critical"
                       )}>
                         {registro.litrosUsados || 0} L
                       </span>
@@ -543,11 +518,11 @@ export function ConsumoModule() {
                     </td>
                     <td>
                       <div className={cn(
-                        "max-w-[200px] truncate group-hover:whitespace-normal group-hover:overflow-visible transition-all duration-300",
-                        registro.litrosUsados > 80 && !registro.justificacion && !registro.observaciones ? "text-critical font-bold animate-pulse text-[10px]" : "text-xs text-muted-foreground"
+                        "max-w-[200px] truncate group-hover:whitespace-normal group-hover:overflow-visible transition-all duration-300 text-xs text-muted-foreground",
+                        registro.litrosUsados >= 80 && !String(registro.justificacion || '').trim() && !String(registro.observaciones || '').trim() ? "text-critical font-bold animate-pulse text-[10px]" : ""
                       )}>
-                        {registro.litrosUsados > 80
-                          ? (registro.justificacion || registro.observaciones || "⚠️ REQUIERE JUSTIFICACIÓN")
+                        {registro.litrosUsados >= 80
+                          ? (String(registro.justificacion || registro.observaciones || '').trim() || "⚠️ REQUIERE JUSTIFICACIÓN")
                           : "-"}
                       </div>
                     </td>
@@ -581,10 +556,10 @@ export function ConsumoModule() {
             </tbody>
           </table>
         </div>
-      </div >
+      </div>
 
       {/* Pagination */}
-      < div className="flex items-center justify-between text-sm text-muted-foreground" >
+      <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>
           Mostrando {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredData.length)} de {filteredData.length} registros
         </span>
@@ -691,23 +666,32 @@ export function ConsumoModule() {
           </DialogHeader>
           {selectedJustification && (
             <div className="space-y-4 py-2">
-              {/* Estatus Badge superior */}
-              {selectedJustification.litrosUsados > 80 && (
-                <div className={cn(
-                  "p-3 rounded-lg flex items-center gap-3 border",
-                  (selectedJustification.observaciones?.length >= 10 || selectedJustification.justificacion?.length >= 10)
-                    ? "bg-success/5 border-success/20 text-success"
-                    : "bg-critical/5 border-critical/20 text-critical"
-                )}>
+              {/* Estatus Badge superior e Imagen */}
+              {selectedJustification.litrosUsados >= 80 && (
+                <div className="flex flex-col items-center gap-4 mb-2">
+                  <div className="relative group">
+                    <img
+                      src="/camioneta.png"
+                      alt="Alerta"
+                      className="w-32 h-auto drop-shadow-[0_0_15px_rgba(var(--critical),0.3)] group-hover:scale-105 transition-transform duration-300"
+                    />
+                  </div>
                   <div className={cn(
-                    "w-2 h-2 rounded-full",
-                    (selectedJustification.observaciones?.length >= 10 || selectedJustification.justificacion?.length >= 10) ? "bg-success" : "bg-critical animate-pulse"
-                  )} />
-                  <span className="text-xs font-black uppercase tracking-widest">
-                    {(selectedJustification.observaciones?.length >= 10 || selectedJustification.justificacion?.length >= 10)
-                      ? "JUSTIFICACIÓN COMPLETADA"
-                      : "REQUIERE JUSTIFICACIÓN URGENTE"}
-                  </span>
+                    "w-full p-3 rounded-lg flex items-center gap-3 border",
+                    (String(selectedJustification.observaciones || '').trim().length >= 10 || String(selectedJustification.justificacion || '').trim().length >= 10)
+                      ? "bg-success/5 border-success/20 text-success"
+                      : "bg-critical/5 border-critical/20 text-critical"
+                  )}>
+                    <div className={cn(
+                      "w-2 h-2 rounded-full",
+                      (String(selectedJustification.observaciones || '').trim().length >= 10 || String(selectedJustification.justificacion || '').trim().length >= 10) ? "bg-success" : "bg-critical animate-pulse"
+                    )} />
+                    <span className="text-xs font-black uppercase tracking-widest">
+                      {(String(selectedJustification.observaciones || '').trim().length >= 10 || String(selectedJustification.justificacion || '').trim().length >= 10)
+                        ? "JUSTIFICACIÓN COMPLETADA"
+                        : "REQUIERE JUSTIFICACIÓN URGENTE"}
+                    </span>
+                  </div>
                 </div>
               )}
 

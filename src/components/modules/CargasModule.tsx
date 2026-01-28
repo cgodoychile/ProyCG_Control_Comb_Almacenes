@@ -52,19 +52,8 @@ export function CargasModule() {
         return await agendamientosApi.create(data);
       }
 
-      // Create the real carga
-      const result = await cargasApi.create(data);
-
-      // Update estanque stock for REAL loads
-      const estanque = estanques.find(e => e.nombre === data.estanque);
-      if (estanque) {
-        const nuevoStock = estanque.stockActual + data.litros;
-        await estanquesApi.update(estanque.id, {
-          stockActual: nuevoStock,
-        });
-      }
-
-      return result;
+      // Create the real carga (Backend handles stock update automatically via processImpact)
+      return await cargasApi.create(data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cargas'] });
@@ -110,32 +99,23 @@ export function CargasModule() {
   // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: async ({ id, justification }: { id: string, justification: string }) => {
-      // Find the load to know how many liters to subtract
-      const carga = cargasData.find(c => c.id === id);
-      const result = await cargasApi.delete(id, { justificacion: justification });
-
-      if (carga && carga.tipo !== 'programada') {
-        const estanque = estanques.find(e => e.nombre === carga.estanque);
-        if (estanque) {
-          await estanquesApi.update(estanque.id, {
-            stockActual: estanque.stockActual - (carga.litros || 0)
-          });
-        }
-      }
-      return result;
+      // Delete the carga (Backend handles inverse stock update automatically)
+      return await cargasApi.delete(id, { justificacion: justification });
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['cargas'] });
       queryClient.invalidateQueries({ queryKey: ['estanques'] });
       toast({
-        title: "✅ Carga eliminada",
-        description: "La carga se ha eliminado y el stock se ha ajustado.",
+        title: "✅ Éxito",
+        description: result.message || "La carga se ha eliminado correctamente.",
       });
+      setIsDeleteDialogOpen(false);
+      setCargaToDelete(null);
     },
     onError: (error: any) => {
       toast({
         title: "❌ Error",
-        description: error.message || "No se pudo eliminar la carga.",
+        description: error.message,
         variant: "destructive",
       });
     },
@@ -178,18 +158,57 @@ export function CargasModule() {
   };
 
   // Filter to show only real loads in the table and sort by date desc
-  const filteredCargas = cargasData
-    .filter(c => c.tipo !== 'programada')
-    .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+  const filteredCargas = (cargasData || [])
+    .filter((c: any) => c && c.tipo !== 'programada')
+    .sort((a: any, b: any) => {
+      const dateA = new Date(a.fecha).getTime();
+      const dateB = new Date(b.fecha).getTime();
+      if (isNaN(dateA)) return 1;
+      if (isNaN(dateB)) return -1;
+      return dateB - dateA;
+    });
+
+  // Robust date parsing
+  const parseDate = (dateStr: any) => {
+    if (!dateStr || dateStr === '-') return new Date(NaN);
+
+    // If it's already a Date or a number (timestamp)
+    if (dateStr instanceof Date) return dateStr;
+    if (typeof dateStr === 'number') return new Date(dateStr);
+
+    const s = String(dateStr).trim();
+
+    // If it's an ISO string (contains T)
+    if (s.includes('T')) return new Date(s);
+
+    // If it's YYYY-MM-DD
+    if (s.match(/^\d{4}-\d{2}-\d{2}$/)) return new Date(s + 'T12:00:00');
+
+    // If DD/MM/YYYY or DD-MM-YYYY
+    const parts = s.split(/[-/ ]/);
+    if (parts.length >= 3) {
+      const p0 = parseInt(parts[0], 10);
+      const p1 = parseInt(parts[1], 10);
+      const p2 = parseInt(parts[2], 10);
+
+      if (p0 > 1000) return new Date(p0, p1 - 1, p2, 12, 0, 0); // YYYY/MM/DD
+      if (p2 > 1000) return new Date(p2, p1 - 1, p0, 12, 0, 0); // DD/MM/YYYY
+    }
+
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? new Date(NaN) : d;
+  };
 
   // Calculate stats using only real loads
   const totalLitrosMes = filteredCargas
     .filter(c => {
-      const fecha = new Date(c.fecha);
+      if (!c.fecha || c.fecha === '-') return false;
+      const fecha = parseDate(c.fecha);
+      if (isNaN(fecha.getTime())) return false;
       const hoy = new Date();
       return fecha.getMonth() === hoy.getMonth() && fecha.getFullYear() === hoy.getFullYear();
     })
-    .reduce((sum, c) => sum + (c.litros || 0), 0);
+    .reduce((sum, c) => sum + (Number(c.litros) || 0), 0);
 
   const proveedoresActivos = [...new Set(filteredCargas.map(c => c.proveedor))].length;
 
@@ -197,7 +216,7 @@ export function CargasModule() {
   const formatDate = (dateString: string) => {
     if (!dateString) return '-';
     try {
-      const date = new Date(dateString);
+      const date = parseDate(dateString);
       if (isNaN(date.getTime())) return '-';
       return format(date, 'dd/MM/yyyy', { locale: es });
     } catch {

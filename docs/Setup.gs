@@ -64,16 +64,16 @@ function setupCompleto() {
       [SHEET_NAMES.ESTANQUES]: ['ID', 'Nombre', 'Ubicación', 'Capacidad Total', 'Stock Actual', 'Stock Mínimo', 'Estado', 'Tipo Combustible', 'Fecha Última Carga', 'Responsable'],
       [SHEET_NAMES.VEHICULOS]: ['Patente', 'Marca', 'Modelo', 'Año', 'Tipo', 'Estado', 'Kilometraje', 'Última Mantención', 'Próxima Mantención', 'Responsable', 'Ubicación'],
       [SHEET_NAMES.ACTIVOS]: ['ID', 'Nombre', 'Tipo', 'Ubicación', 'Estado', 'Fecha Adquisición', 'Valor', 'Responsable', 'Marca', 'Modelo', 'N/S'],
-      [SHEET_NAMES.CARGAS]: ['Fecha', 'Tipo', 'Fecha_Programada', 'Numero_Guia', 'Estanque', 'Proveedor', 'Litros', 'Responsable', 'Observaciones', 'Patente_Camion', 'Tipo_Combustible', 'Conductor'],
+      [SHEET_NAMES.CARGAS]: ['ID', 'FECHA', 'TIPO', 'FECHA_PROGRAMADA', 'NUMERO_GUIA', 'ESTANQUE', 'PROVEEDOR', 'LITROS', 'RESPONSABLE', 'OBSERVACIONES', 'PATENTE_CAMION', 'TIPO_COMBUSTIBLE', 'CONDUCTOR'],
       [SHEET_NAMES.USUARIOS]: ['Email', 'Password', 'Rol', 'Nombre'],
-      [SHEET_NAMES.AGENDAMIENTOS]: ['Fecha', 'Tipo', 'Fecha_Programada', 'Numero_Guia', 'Estanque', 'Proveedor', 'Litros', 'Responsable', 'Observaciones', 'Patente_Camion', 'Tipo_Combustible', 'Conductor'],
+      [SHEET_NAMES.AGENDAMIENTOS]: ['ID', 'FECHA', 'TIPO', 'FECHA_PROGRAMADA', 'NUMERO_GUIA', 'ESTANQUE', 'PROVEEDOR', 'LITROS', 'RESPONSABLE', 'OBSERVACIONES', 'PATENTE_CAMION', 'TIPO_COMBUSTIBLE', 'CONDUCTOR'],
       [SHEET_NAMES.MANTENCIONES]: ['ID', 'Fecha', 'Fecha Ejecución', 'Patente', 'Tipo', 'Kilometraje', 'Descripción', 'Próxima Mantención', 'Costo', 'Estado'],
       [SHEET_NAMES.ALMACENES]: ['ID', 'Nombre', 'Ubicación', 'Responsable', 'Fecha_Creación', 'Estado'],
       [SHEET_NAMES.PRODUCTOS_ALMACEN]: ['ID', 'Almacen_ID', 'Nombre', 'Categoría', 'Cantidad', 'Unidad', 'Stock_Minimo', 'Valor_Unitario', 'Fecha_Ingreso', 'Proveedor', 'Estado', 'Retornable', 'En Uso', 'Es Activo'],
       [SHEET_NAMES.MOVIMIENTOS_ALMACEN]: ['ID', 'Producto_ID', 'Tipo', 'Origen', 'Destino', 'Cantidad', 'Fecha', 'Responsable', 'Guía', 'Motivo', 'Proveedor', 'Observaciones', 'Fecha Devolución Estimada'],
       [SHEET_NAMES.PERSONAS]: ['RUT/DNI', 'Nombre', 'Cargo', 'Empresa', 'Email', 'Teléfono', 'Estado', 'Fecha Ingreso', 'Observaciones'],
       [SHEET_NAMES.AUDITORIA]: ['ID', 'Fecha', 'Usuario', 'Módulo', 'Acción', 'Mensaje', 'Tipo'],
-      [SHEET_NAMES.ALERTA]: ['ID', 'Tipo', 'Mensaje', 'Módulo', 'Fecha', 'Leída', 'Acción']
+      [SHEET_NAMES.ALERTAS]: ['ID', 'Tipo', 'Mensaje', 'Módulo', 'Fecha', 'Leída', 'Acción']
     };
 
     Object.entries(hojasNecesarias).forEach(([nombre, headers]) => {
@@ -121,7 +121,7 @@ function repairAllSheetStructures() {
 
     // 4. Reparar CARGAS_ESTANQUES
     const cSheet = getSheet(SHEET_NAMES.CARGAS);
-    const cHeaders = ['Fecha', 'Tipo', 'Fecha_Programada', 'Numero_Guia', 'Estanque', 'Proveedor', 'Litros', 'Responsable', 'Observaciones', 'Patente_Camion', 'Tipo_Combustible', 'Conductor'];
+    const cHeaders = ['ID', 'FECHA', 'TIPO', 'FECHA_PROGRAMADA', 'NUMERO_GUIA', 'ESTANQUE', 'PROVEEDOR', 'LITROS', 'RESPONSABLE', 'OBSERVACIONES', 'PATENTE_CAMION', 'TIPO_COMBUSTIBLE', 'CONDUCTOR'];
     cSheet.getRange(1, 1, 1, cHeaders.length).setValues([cHeaders]);
     Logger.log('✅ Cabeceras de CARGAS reparadas');
     

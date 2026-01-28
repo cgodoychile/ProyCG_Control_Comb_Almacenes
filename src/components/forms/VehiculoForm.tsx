@@ -5,7 +5,14 @@ import { FormDialog } from '@/components/shared/FormDialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { personasApi } from '@/lib/apiService';
+import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Check, ChevronsUpDown, Search } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 import type { Vehiculo } from '@/types/crm';
 
@@ -50,8 +57,22 @@ export function VehiculoForm({
         },
     });
 
+    const [isManualResponsable, setIsManualResponsable] = useState(false);
+
+    // Fetch Personas for the dropdown
+    const { data: personasResponse } = useQuery({
+        queryKey: ['personas'],
+        queryFn: personasApi.getAll
+    });
+
+    const personasData = personasResponse?.data || [];
+
     useEffect(() => {
         if (open) {
+            const resp = initialData?.responsable || '';
+            const isInList = personasData.some(p => p.nombreCompleto === resp);
+            setIsManualResponsable(!!resp && !isInList);
+
             if (initialData) {
                 reset({
                     id: initialData.id || '',
@@ -65,10 +86,12 @@ export function VehiculoForm({
                     proximaMantencion: initialData.proximaMantencion || '',
                     proximaMantencionKm: initialData.proximaMantencionKm || 0,
                     otrosMantenimientos: initialData.otrosMantenimientos || '',
-                    responsable: initialData.responsable || '',
+                    //@ts-ignore
+                    responsable: resp,
                     ubicacion: initialData.ubicacion || '',
                 });
             } else {
+                setIsManualResponsable(false);
                 reset({
                     id: '',
                     marca: '',
@@ -86,7 +109,7 @@ export function VehiculoForm({
                 });
             }
         }
-    }, [initialData, reset, open]);
+    }, [initialData, reset, open, personasData]);
 
     const onFormSubmit = (data: VehiculoFormData) => {
         onSubmit(data);
@@ -264,11 +287,85 @@ export function VehiculoForm({
                 <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                         <Label htmlFor="responsable">Responsable *</Label>
-                        <Input
-                            id="responsable"
-                            placeholder="Juan Pérez"
-                            {...register('responsable')}
-                        />
+                        {!isManualResponsable ? (
+                            <div className="flex gap-2">
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button
+                                            variant="outline"
+                                            role="combobox"
+                                            className={cn(
+                                                "w-full justify-between font-normal",
+                                                !watch('responsable') && "text-muted-foreground"
+                                            )}
+                                        >
+                                            {watch('responsable')
+                                                ? personasData.find((p) => p.nombreCompleto === watch('responsable'))?.nombreCompleto || watch('responsable')
+                                                : "Seleccionar responsable"}
+                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                                        <Command>
+                                            <CommandInput placeholder="Buscar responsable..." />
+                                            <CommandList>
+                                                <CommandEmpty>No se encontraron resultados.</CommandEmpty>
+                                                <CommandGroup>
+                                                    <CommandItem
+                                                        onSelect={() => {
+                                                            setIsManualResponsable(true);
+                                                            setValue('responsable', '');
+                                                        }}
+                                                        className="font-bold text-primary cursor-pointer"
+                                                    >
+                                                        <span className="flex items-center gap-2">
+                                                            <Search className="h-4 w-4" />
+                                                            + Ingresar manualmente
+                                                        </span>
+                                                    </CommandItem>
+                                                </CommandGroup>
+                                                <CommandGroup heading="Personas">
+                                                    {personasData?.map((persona) => (
+                                                        <CommandItem
+                                                            key={persona.id}
+                                                            value={persona.nombreCompleto}
+                                                            onSelect={(value) => {
+                                                                setValue('responsable', value);
+                                                            }}
+                                                        >
+                                                            <Check
+                                                                className={cn(
+                                                                    "mr-2 h-4 w-4",
+                                                                    watch('responsable') === persona.nombreCompleto ? "opacity-100" : "opacity-0"
+                                                                )}
+                                                            />
+                                                            {persona.nombreCompleto}
+                                                        </CommandItem>
+                                                    ))}
+                                                </CommandGroup>
+                                            </CommandList>
+                                        </Command>
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
+                        ) : (
+                            <div className="flex gap-2">
+                                <Input
+                                    id="responsable"
+                                    placeholder="Nombre manual"
+                                    {...register('responsable')}
+                                />
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setIsManualResponsable(false)}
+                                    title="Volver a la lista"
+                                >
+                                    ✕
+                                </Button>
+                            </div>
+                        )}
                         {errors.responsable && (
                             <p className="text-sm text-destructive">{errors.responsable.message}</p>
                         )}

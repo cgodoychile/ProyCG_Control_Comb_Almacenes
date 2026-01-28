@@ -1,103 +1,125 @@
 /**
- * MAIN ENTRY POINTS
+ * DESPACHADOR CENTRAL DE PETICIONES
+ * VERSION: 2026-01-28-REDESIGN-ACTAS-V4
  */
-
-/**
- * Crea un menú personalizado al abrir la hoja de cálculo
- */
-function onOpen() {
-  const ui = SpreadsheetApp.getUi();
-  ui.createMenu('⚙️ MANTENIMIENTO')
-      .addItem('Reparar Columnas Inventario', 'repairInventoryHeaders')
-      .addItem('Recalcular Stocks Estanques', 'recalcularTotal')
-      .addSeparator()
-      .addItem('Configuración Completa (Setup)', 'setupCompleto')
-      .addToUi();
-}
 
 function doGet(e) {
   try {
     const params = e.parameter;
-    const entity = params.entity;
-    const action = params.action;
+    
+    // EMERGENCY TRIGGER
+    if (params.repair === 'mantenciones') {
+      const repairResult = repairMantencionesStructure();
+      return ContentService.createTextOutput(JSON.stringify(createResponse(true, repairResult))).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    if (params.version) {
+       return ContentService.createTextOutput("VERSION: 2026-01-28-REDESIGN-ACTAS-V4").setMimeType(ContentService.MimeType.TEXT);
+    }
+    const entity = params.entity ? String(params.entity).trim().toLowerCase() : '';
+    const action = params.action ? String(params.action).trim().toLowerCase() : 'getall';
     const id = params.id;
     
-    if (!entity || !action) {
-      return ContentService.createTextOutput(JSON.stringify(createErrorResponse('Entidad y acción son requeridas')))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
+    console.log(`GET Request: Entity=${entity}, Action=${action}, ID=${id}`);
     
+    if (!entity) return ContentService.createTextOutput(JSON.stringify(createErrorResponse("Entidad requerida"))).setMimeType(ContentService.MimeType.JSON);
+
     let result;
-    switch (entity.toLowerCase()) {
-      case 'consumos': result = handleConsumosGet(action, id); break;
-      case 'vehiculos': result = handleVehiculosGet(action, id); break;
-      case 'estanques': result = handleEstanquesGet(action, id); break;
-      case 'cargas': result = handleCargasGet(action, id); break;
-      case 'activos': result = handleActivosGet(action, id); break;
-      case 'usuarios': result = handleUsuariosGet(action); break;
-      case 'agendamientos': result = handleAgendamientosGet(action, id); break;
-      case 'mantenciones': result = handleMantencionesGet(action, id); break;
-      case 'almacenes': result = handleAlmacenesGet(action, id); break;
-      case 'productos': result = handleProductosGet(action, id, params.almacenId); break;
-      case 'movimientos': result = handleMovimientosGet(action, id, params.almacenId); break;
-      case 'personas': result = handlePersonasGet(action, id); break;
-      case 'alertas':
-      case 'auditoria': result = handleAuditoriaGet(action); break;
-      case 'debug': result = handleDebugGet(action); break;
-      default: result = createErrorResponse('Entidad no válida: ' + entity);
-    }
     
-    return ContentService.createTextOutput(JSON.stringify(result))
-      .setMimeType(ContentService.MimeType.JSON);
+    if (entity.includes('mantencion') || entity.startsWith('man')) {
+       result = typeof handleMantencionesGet === 'function' ? handleMantencionesGet(action, id) : createErrorResponse("Módulo Mantenciones no cargado");
+    } else if (entity === 'alertas') {
+      result = action === 'getactive' && typeof getActiveAlertas === 'function' ? getActiveAlertas() : handleGetAll(entity);
+    } else if (entity === 'dashboard' && action === 'getstats') {
+      result = typeof getDashboardStats === 'function' ? getDashboardStats() : createErrorResponse("Módulo Dashboard no cargado");
+    } else if (entity === 'cargas') {
+      result = typeof handleCargasGet === 'function' ? handleCargasGet(action, id) : handleGetAll(entity);
+    } else if (entity === 'agendamientos') {
+      result = typeof handleAgendamientosGet === 'function' ? handleAgendamientosGet(action, id) : handleGetAll(entity);
+    } else if (entity === 'vehiculos') {
+      result = typeof handleVehiculosGet === 'function' ? handleVehiculosGet(action, id) : handleGetAll(entity);
+    } else if (entity === 'activos') {
+      result = typeof handleActivosGet === 'function' ? handleActivosGet(action, id) : handleGetAll(entity);
+    } else if (entity === 'almacenes') {
+      result = typeof handleAlmacenesGet === 'function' ? handleAlmacenesGet(action, id) : handleGetAll(entity);
+    } else if (entity === 'consumos') {
+      result = typeof handleConsumosGet === 'function' ? handleConsumosGet(action, id) : handleGetAll(entity);
+    } else if (entity === 'movimientos' || entity === 'movimientos_almacen') {
+      const almacenId = params.almacenId || params.almacenid;
+      result = typeof handleMovimientosGet === 'function' ? handleMovimientosGet(action, id, almacenId) : handleGetAll('MOVIMIENTOS_ALMACEN');
+    } else if (entity === 'productos' || entity === 'productos_almacen') {
+      const almacenId = params.almacenId || params.almacenid;
+      result = typeof handleProductosGet === 'function' ? handleProductosGet(action, id, almacenId) : handleGetAll('PRODUCTOS_ALMACEN');
+    } else if (entity === 'personas') {
+      result = typeof handlePersonasGet === 'function' ? handlePersonasGet(action, id) : handleGetAll(entity);
+    } else if (entity === 'actas') {
+      result = typeof handleActasGet === 'function' ? handleActasGet(action, id) : handleGetAll('ACTAS');
+    } else {
+      result = handleGetAll(entity);
+    }
+
+    return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
   } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify(createErrorResponse('Error crítico en doGet: ' + error.toString())))
-      .setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify(createErrorResponse(error.toString()))).setMimeType(ContentService.MimeType.JSON);
   }
 }
 
 function doPost(e) {
   try {
     const params = e.parameter;
-    const entity = params.entity;
-    const action = params.action;
-    const id = params.id;
+    const body = e.postData && e.postData.contents ? JSON.parse(e.postData.contents) : {};
     
-    let data = {};
-    if (e.postData && e.postData.contents) {
-      try {
-        data = JSON.parse(e.postData.contents);
-      } catch (parseError) {
-        // Fallback for non-JSON or other formats
-        data = { _raw: e.postData.contents };
+    const entity = (params.entity || body.entity || '').toLowerCase().trim();
+    const action = (params.action || body.action || '').toLowerCase().trim();
+    const id = params.id || body.id;
+    
+    console.log(`POST Request: Entity=${entity}, Action=${action}`);
+    
+    const responsable = body.responsable || params.responsable;
+    let result;
+
+    const isMantencion = /^(man|manten)/i.test(entity) || /mantencion/i.test(entity);
+    
+    if (isMantencion) {
+      result = typeof handleMantencionesPost === 'function' ? handleMantencionesPost(action, id, body) : createErrorResponse("Módulo Mantenciones no cargado");
+    } else if (entity === 'auth' && action === 'login') {
+      result = typeof handleLogin === 'function' ? handleLogin(body.email, body.password) : createErrorResponse("Módulo Login no cargado");
+    } else if (entity === 'alertas' && action === 'seen') {
+      result = typeof markAlertaAsSeen === 'function' ? markAlertaAsSeen(id) : createErrorResponse("Módulo Alertas no cargado");
+    } else if (entity === 'cargas') {
+      result = typeof handleCargasPost === 'function' ? handleCargasPost(action, id, body) : createErrorResponse("Módulo Cargas no cargado");
+    } else if (entity === 'agendamientos') {
+      result = typeof handleAgendamientosPost === 'function' ? handleAgendamientosPost(action, id, body) : createErrorResponse("Módulo Agendamientos no cargado");
+    } else if (entity === 'vehiculos') {
+      result = typeof handleVehiculosPost === 'function' ? handleVehiculosPost(action, id, body) : createErrorResponse("Módulo Vehículos no cargado");
+    } else if (entity === 'activos') {
+      result = typeof handleActivosPost === 'function' ? handleActivosPost(action, id, body) : createErrorResponse("Módulo Activos no cargado");
+    } else if (entity === 'almacenes') {
+      result = typeof handleAlmacenesPost === 'function' ? handleAlmacenesPost(action, id, body) : createErrorResponse("Módulo Almacenes no cargado");
+    } else if (entity === 'consumos') {
+      result = typeof handleConsumosPost === 'function' ? handleConsumosPost(action, id, body) : createErrorResponse("Módulo Consumos no cargado");
+    } else if (entity === 'actas') {
+      console.log(`[Main] Routing to Actas module. Action: ${action}`);
+      result = typeof handleActasPost === 'function' ? handleActasPost(action, id, body) : createErrorResponse("Módulo Actas no cargado");
+    } else if (entity === 'movimientos' || entity === 'movimientos_almacen') {
+      result = typeof handleMovimientosPost === 'function' ? handleMovimientosPost(action, id, body) : createErrorResponse("Módulo Movimientos no cargado");
+    } else if (entity === 'productos' || entity === 'productos_almacen') {
+      result = typeof handleProductosPost === 'function' ? handleProductosPost(action, id, body) : createErrorResponse("Módulo Productos no cargado");
+    } else if (entity === 'personas') {
+      result = typeof handlePersonasPost === 'function' ? handlePersonasPost(action, id, body) : createErrorResponse("Módulo Personas no cargado");
+    } else {
+      // Manejo unificado vía BaseCRUD o acciones genéricas
+      if (action === 'delete') {
+        result = handleDelete(entity, id, body, responsable);
+      } else if (action === 'update' || action === 'edit') {
+        result = handleUpdate(entity, id, body, responsable);
+      } else {
+        result = handleCreate(entity, body, responsable);
       }
     }
-    
-    let result;
-    switch (entity.toLowerCase()) {
-      case 'consumos': result = handleConsumosPost(action, id, data); break;
-      case 'vehiculos': result = handleVehiculosPost(action, id, data); break;
-      case 'estanques': result = handleEstanquesPost(action, id, data); break;
-      case 'cargas': result = handleCargasPost(action, id, data); break;
-      case 'activos': result = handleActivosPost(action, id, data); break;
-      case 'usuarios': result = handleUsuariosPost(action, id, data); break;
-      case 'agendamientos': result = handleAgendamientosPost(action, id, data); break;
-      case 'mantenciones': result = handleMantencionesPost(action, id, data); break;
-      case 'almacenes': result = handleAlmacenesPost(action, id, data); break;
-      case 'productos': result = handleProductosPost(action, id, data); break;
-      case 'movimientos': result = handleMovimientosPost(action, id, data); break;
-      case 'personas': result = handlePersonasPost(action, id, data); break;
-      case 'auth': result = handleAuthPost(action, id, data); break;
-      case 'alertas':
-      case 'auditoria': result = handleAuditoriaPost(action, id, data); break;
-      default: result = createErrorResponse('Entidad no válida: ' + entity);
-    }
-    
-    return ContentService.createTextOutput(JSON.stringify(result))
-      .setMimeType(ContentService.MimeType.JSON);
+
+    return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
   } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify(createErrorResponse('Error crítico en doPost: ' + error.toString())))
-      .setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify(createErrorResponse(error.toString()))).setMimeType(ContentService.MimeType.JSON);
   }
 }
-
-// End of file

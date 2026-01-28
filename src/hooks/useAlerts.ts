@@ -87,14 +87,18 @@ export function useAlerts() {
             // Try to parse JSON message for special actions
             if (mensaje) {
                 let jsonToParse = mensaje;
-                // If message has a tail (like " | Justificación: ..."), strip it for JSON parsing
-                if (mensaje.includes(' | Justificación:')) {
-                    jsonToParse = mensaje.split(' | Justificación:')[0];
+                // If message has a tail (like " ||| Something"), strip it for JSON parsing
+                if (mensaje.includes(' ||| ')) {
+                    jsonToParse = mensaje.split(' ||| ')[0];
                 }
 
                 if (jsonToParse.trim().startsWith('{')) {
                     try {
-                        const parsed = JSON.parse(jsonToParse);
+                        // REINFORCE: Only try to parse if it looks like complete JSON
+                        const lastBrace = jsonToParse.lastIndexOf('}');
+                        const potentialJson = jsonToParse.substring(0, lastBrace + 1);
+
+                        const parsed = JSON.parse(potentialJson);
                         metadata = parsed;
                         if (parsed.name) {
                             const entityMap: any = { 'activos': 'Activo', 'vehiculos': 'Vehículo', 'consumos': 'Consumo', 'estanques': 'Estanque', 'almacenes': 'Bodega' };
@@ -104,8 +108,9 @@ export function useAlerts() {
                             mensaje = parsed.mensaje;
                         }
                     } catch (e) {
-                        console.warn('Individual alert parsing error:', e);
-                        // Fallback to original message if JSON is invalid
+                        // If parsing fails, use the message parts without technical separators
+                        mensaje = mensaje.replace(' ||| ', ' - ').replace('###', ' - ');
+                        console.warn('Alert parsing fallback active for:', a.id);
                     }
                 }
             }

@@ -15,7 +15,11 @@ import {
 import { useApi } from '@/hooks/useApi';
 import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
-import { Check, X, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { Check, X, ThumbsUp, ThumbsDown, Activity } from 'lucide-react';
+import {
+    AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+    BarChart, Bar, Legend, Cell
+} from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { KPICard } from '@/components/dashboard/KPICard';
@@ -70,8 +74,28 @@ export function AuditoriaModule() {
     // Calculate stats
     const totalActions = auditLogs.length;
     const createActions = auditLogs.filter(l => l.accionRealizada === 'crear').length;
-    const updateActions = auditLogs.filter(l => l.accionRealizada === 'actualizar').length;
+    const updateActions = auditLogs.filter(l => l.accionRealizada === 'actualizar' || l.accionRealizada === 'editar').length;
     const deleteActions = auditLogs.filter(l => l.accionRealizada === 'eliminar').length;
+
+    // Trend Data for Chart
+    const trendData = useMemo(() => {
+        const last15Days = [...Array(15)].map((_, i) => {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            return d.toISOString().split('T')[0];
+        }).reverse();
+
+        const counts: { [key: string]: number } = {};
+        auditLogs.forEach(log => {
+            const date = new Date(log.fecha).toISOString().split('T')[0];
+            counts[date] = (counts[date] || 0) + 1;
+        });
+
+        return last15Days.map(date => ({
+            date: date.split('-').slice(1).reverse().join('/'),
+            acciones: counts[date] || 0
+        }));
+    }, [auditLogs]);
 
 
     // Filter logs
@@ -294,43 +318,88 @@ export function AuditoriaModule() {
                         variant="outline"
                         className="gap-2 border-accent text-accent hover:bg-accent/10 h-10"
                         onClick={() => {
-                            // TODO: Implement export functionality
-                            console.log('Exportar auditoría');
+                            const columns = ['Fecha', 'Acción', 'Módulo', 'Descripción', 'Usuario', 'Tipo'];
+                            const data = filteredLogs.map(log => [
+                                formatDate(log.fecha),
+                                getActionLabel(log.accionRealizada || ''),
+                                log.modulo || 'Sistema',
+                                log.mensaje || '',
+                                log.usuario || 'Sistema',
+                                getTypeLabel(log.tipo || '')
+                            ]);
+                            import('@/utils/pdfExport').then(m => m.generatePDF('Auditoría de Sistema', data, columns));
                         }}
                     >
                         <Download className="w-4 h-4" />
-                        Exportar
+                        Exportar PDF
                     </Button>
                 </div>
             </div>
 
-            {/* KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <KPICard
-                    title="Total Acciones"
-                    value={totalActions.toString()}
-                    icon={FileText}
-                    variant="default"
-                />
-                <KPICard
-                    title="Creaciones"
-                    value={createActions.toString()}
-                    icon={Plus}
-                    variant="success"
-                />
-                <KPICard
-                    title="Actualizaciones"
-                    value={updateActions.toString()}
-                    icon={Edit}
-                    variant="warning"
-                />
-                <KPICard
-                    title="Eliminaciones"
-                    value={deleteActions.toString()}
-                    icon={Trash2}
-                    variant="default"
-                    subtitle={deleteActions > 0 ? "Requieren atención" : undefined}
-                />
+            {/* KPI y Gráfico de Tendencias */}
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                <div className="lg:col-span-1 grid grid-cols-1 gap-4">
+                    <KPICard
+                        title="Total Acciones"
+                        value={totalActions.toString()}
+                        icon={FileText}
+                        variant="default"
+                    />
+                    <KPICard
+                        title="Eliminaciones"
+                        value={deleteActions.toString()}
+                        icon={Trash2}
+                        variant="destructive"
+                    />
+                    <KPICard
+                        title="Última Actividad"
+                        value={auditLogs[0] ? new Date(auditLogs[0].fecha).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                        icon={Activity}
+                        variant="accent"
+                    />
+                </div>
+
+                <div className="lg:col-span-3 card-fuel p-6 border border-border shadow-sm min-h-[300px] flex flex-col">
+                    <div className="flex items-center justify-between mb-4">
+                        <h4 className="text-sm font-black uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                            <Activity className="w-4 h-4 text-accent" />
+                            Densidad de Actividad (Últimos 15 días)
+                        </h4>
+                    </div>
+                    <div className="flex-1 w-full min-h-[200px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={trendData}>
+                                <defs>
+                                    <linearGradient id="colorAcciones" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor="var(--accent)" stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#333" />
+                                <XAxis dataKey="date" fontSize={10} tick={{ fill: '#888' }} axisLine={false} tickLine={false} />
+                                <YAxis fontSize={10} tick={{ fill: '#888' }} axisLine={false} tickLine={false} />
+                                <Tooltip
+                                    contentStyle={{
+                                        backgroundColor: '#1a1a1a',
+                                        border: '1px solid #333',
+                                        borderRadius: '8px',
+                                        fontSize: '12px',
+                                        color: '#fff'
+                                    }}
+                                    itemStyle={{ color: '#fff' }}
+                                />
+                                <Area
+                                    type="monotone"
+                                    dataKey="acciones"
+                                    stroke="var(--accent)"
+                                    fillOpacity={1}
+                                    fill="url(#colorAcciones)"
+                                    strokeWidth={3}
+                                />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
             </div>
 
             {/* Filters */}

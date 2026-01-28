@@ -17,6 +17,7 @@ import { PerfilModule } from '@/components/modules/PerfilModule';
 import { ConfiguracionModule } from '@/components/modules/ConfiguracionModule';
 import { PersonasModule } from '@/components/modules/PersonasModule';
 import { AuditoriaModule } from '@/components/modules/AuditoriaModule';
+import ActasModule from '@/components/modules/ActasModule';
 
 const moduleConfig: Record<string, { title: string; subtitle: string }> = {
   dashboard: { title: 'Dashboard', subtitle: 'Vista general del sistema' },
@@ -34,6 +35,7 @@ const moduleConfig: Record<string, { title: string; subtitle: string }> = {
   perfil: { title: 'Mi Perfil', subtitle: 'Información personal y configuración de cuenta' },
   configuracion: { title: 'Configuración', subtitle: 'Ajustes y preferencias del sistema' },
   auditoria: { title: 'Auditoría del Sistema', subtitle: 'Registro de acciones y cambios en el sistema' },
+  actas: { title: 'Actas de Cargo', subtitle: 'Historial de asignaciones y documentos' },
 };
 
 const Index = () => {
@@ -45,7 +47,7 @@ const Index = () => {
       case 'dashboard':
         return <DashboardModule />;
       case 'consumo':
-        return <ConsumoModule searchTerm={globalSearch} />;
+        return <ConsumoModule />;
       case 'estanques':
         return <EstanquesModule />;
       case 'cargas':
@@ -72,6 +74,8 @@ const Index = () => {
         return <ConfiguracionModule />;
       case 'auditoria':
         return <AuditoriaModule />;
+      case 'actas':
+        return <ActasModule />;
       default:
         return <DashboardModule />;
     }

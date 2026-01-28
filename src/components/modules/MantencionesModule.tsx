@@ -20,19 +20,29 @@ export function MantencionesModule() {
 
     // Helper function to safely format dates
     const formatSafeDate = (dateString: string | null | undefined) => {
-        if (!dateString || dateString === '') return '-';
+        if (!dateString || dateString === '' || dateString === '-') return '-';
         try {
+            // If it's already a formatted string like DD-MM-YYYY, try to return it or reformat
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) {
+                // Try to handle DD-MM-YYYY format manually if new Date fails
+                const parts = dateString.split(/[-/]/);
+                if (parts.length === 3) {
+                    // Assume DD-MM-YYYY or YYYY-MM-DD
+                    if (parts[0].length === 4) return dateString; // YYYY-MM-DD
+                    return `${parts[0].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[2]}`;
+                }
+                return dateString;
+            }
+
             return new Intl.DateTimeFormat('es-CL', {
                 day: '2-digit',
                 month: '2-digit',
                 year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false,
                 timeZone: 'America/Santiago'
-            }).format(new Date(dateString));
+            }).format(date);
         } catch {
-            return '-';
+            return dateString || '-';
         }
     };
     const [isFormOpen, setIsFormOpen] = useState(false);
@@ -53,11 +63,27 @@ export function MantencionesModule() {
         queryFn: vehiculosApi.getAll,
     });
 
+    const parseDateForSort = (d: any) => {
+        if (!d) return 0;
+        if (d instanceof Date) return d.getTime();
+        const str = String(d);
+        // Handle DD/MM/YYYY HH:mm
+        const parts = str.split(/[\s/:-]/);
+        if (parts.length >= 3) {
+            if (parts[0].length === 4) return new Date(str).getTime(); // YYYY-MM-DD
+            // DD MM YYYY [HH mm]
+            const day = parseInt(parts[0]);
+            const month = parseInt(parts[1]) - 1;
+            const year = parseInt(parts[2]);
+            const hour = parts[3] ? parseInt(parts[3]) : 0;
+            const min = parts[4] ? parseInt(parts[4]) : 0;
+            return new Date(year, month, day, hour, min).getTime();
+        }
+        return new Date(str).getTime() || 0;
+    };
+
     const mantenciones = (mantencionesResponse?.data || []).sort((a: any, b: any) => {
-        // Sort by date descending (newest first)
-        const dateA = a.fechaIngreso ? new Date(a.fechaIngreso).getTime() : 0;
-        const dateB = b.fechaIngreso ? new Date(b.fechaIngreso).getTime() : 0;
-        return dateB - dateA;
+        return parseDateForSort(b.fechaIngreso) - parseDateForSort(a.fechaIngreso);
     });
     const vehiculos = vehiculosResponse?.data || [];
 
@@ -304,31 +330,37 @@ export function MantencionesModule() {
                                             {m.estado}
                                         </span>
                                     </td>
-                                    <td className="px-4 py-3 text-muted-foreground">{m.kmActual?.toLocaleString()}</td>
-                                    <td className="px-4 py-3 font-medium text-primary">{m.proximaMantencionKm?.toLocaleString() || '-'}</td>
+                                    <td className="px-4 py-3 text-muted-foreground">{m.kmActual?.toLocaleString()} km</td>
+                                    <td className="px-4 py-3 font-medium text-primary">
+                                        {m.proximaMantencionKm ? `${Number(m.proximaMantencionKm).toLocaleString()} km` : '-'}
+                                    </td>
                                     <td className="px-4 py-3 text-xs">{m.taller}</td>
                                     <td className="px-4 py-3">${m.costo?.toLocaleString()}</td>
-                                    <td className="px-4 py-3 text-right flex justify-end gap-1">
-                                        {canEdit && (
-                                            <>
-                                                <Button
-                                                    size="sm"
-                                                    variant="ghost"
-                                                    className="h-8 w-8 p-0"
-                                                    onClick={() => handleEdit(m)}
-                                                >
-                                                    <Edit className="w-4 h-4 text-muted-foreground" />
-                                                </Button>
-                                                <Button
-                                                    size="sm"
-                                                    variant="ghost"
-                                                    className="h-8 w-8 p-0 hover:text-destructive"
-                                                    onClick={() => handleDelete(m.id)}
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </Button>
-                                            </>
-                                        )}
+                                    <td className="px-4 py-3 text-right">
+                                        <div className="flex justify-end gap-2 px-2">
+                                            {canEdit && (
+                                                <>
+                                                    <Button
+                                                        size="icon"
+                                                        variant="outline"
+                                                        className="h-9 w-9 text-blue-400 border-blue-400/30 hover:bg-blue-400/10 hover:border-blue-400 hover:text-blue-300 transition-all duration-300 shadow-sm"
+                                                        onClick={() => handleEdit(m)}
+                                                        title="Editar Mantención"
+                                                    >
+                                                        <Edit className="w-4 h-4" />
+                                                    </Button>
+                                                    <Button
+                                                        size="icon"
+                                                        variant="outline"
+                                                        className="h-9 w-9 text-rose-500 border-rose-500/30 hover:bg-rose-500/10 hover:border-rose-500 hover:text-rose-600 transition-all duration-300 shadow-sm"
+                                                        onClick={() => handleDelete(m.id)}
+                                                        title="Eliminar Mantención"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </Button>
+                                                </>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))}

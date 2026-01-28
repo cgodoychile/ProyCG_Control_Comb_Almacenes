@@ -90,9 +90,12 @@ export type CargaFormData = z.infer<typeof cargaSchema>;
 
 // Activo Validation Schema
 export const activoSchema = z.object({
-    id: z.string().min(3, 'La patente/ID debe tener al menos 3 caracteres'),
+    id: z.string().optional(),
     nombre: z.string().min(3, 'El nombre debe tener al menos 3 caracteres'),
     categoria: z.string().min(1, 'La categoría es requerida'),
+    marca: z.string().min(1, 'La marca es requerida'),
+    modelo: z.string().min(1, 'El modelo es requerido'),
+    numeroSerie: z.string().min(1, 'N/S es requerido'),
     ubicacion: z.string().min(1, 'La ubicación es requerida'),
     estado: z.enum(['operativo', 'mantencion', 'fuera_servicio']),
     fechaAdquisicion: z.string().min(1, 'La fecha de adquisición es requerida'),

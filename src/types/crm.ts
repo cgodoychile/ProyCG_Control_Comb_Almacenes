@@ -1,7 +1,9 @@
 export interface Persona {
   id: string; // RUT, DNI o ID único
+  nombre: string;
   nombreCompleto: string;
   rol: string;
+  cargo?: string; // Por retrocompatibilidad
   empresa: string;
   email?: string;
   telefono?: string;
@@ -64,6 +66,9 @@ export interface Activo {
   id: string;
   nombre: string;
   categoria: string;
+  marca?: string;
+  modelo?: string;
+  numeroSerie?: string;
   ubicacion: string;
   estado: 'operativo' | 'mantencion' | 'fuera_servicio';
   fechaAdquisicion: string;

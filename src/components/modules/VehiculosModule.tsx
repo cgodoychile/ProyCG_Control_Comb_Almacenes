@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { vehiculosApi, auditoriaApi } from '@/lib/apiService';
+import { vehiculosApi, auditoriaApi, actasApi } from '@/lib/apiService';
 import { VehiculoForm } from '@/components/forms/VehiculoForm';
 import { Button } from '@/components/ui/button';
-import { Plus, Loader2, Edit, Trash2, Car, Calendar, Gauge } from 'lucide-react';
+import { Plus, Loader2, Edit, Trash2, Car, Calendar, Gauge, FileText, Printer } from 'lucide-react';
 import { ConfirmDeleteWithJustificationDialog } from '@/components/shared/ConfirmDeleteWithJustificationDialog';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -13,6 +13,8 @@ import { useAuth } from '@/context/AuthContext';
 import { KPICard } from '@/components/dashboard/KPICard';
 import { speakSuccess } from '@/utils/voiceNotification';
 import { useApi } from '@/hooks/useApi';
+import { useReactToPrint } from 'react-to-print';
+import { PrintableCargoForm } from '@/components/shared/PrintableCargoForm';
 import type { Vehiculo } from '@/types/crm';
 
 export function VehiculosModule() {
@@ -22,8 +24,23 @@ export function VehiculosModule() {
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
     const [vehicleToDelete, setVehicleToDelete] = useState<string | null>(null);
     const [editingVehiculo, setEditingVehiculo] = useState<any>(null);
+    const [printingData, setPrintingData] = useState<any>(null);
+    const printRef = useRef<HTMLDivElement>(null);
     const { toast } = useToast();
     const queryClient = useQueryClient();
+
+    const handlePrint = useReactToPrint({
+        contentRef: printRef,
+        documentTitle: `Acta_Cargo_${printingData?.responsable || 'Vehiculo'}`,
+        onAfterPrint: () => setPrintingData(null)
+    });
+
+    const triggerPrint = (data: any) => {
+        setPrintingData(data);
+        setTimeout(() => {
+            if (handlePrint) handlePrint();
+        }, 300);
+    };
 
     // Data Fetching
     const { data: vehiculosResponse, isLoading: loadingVehiculos } = useQuery({
@@ -40,13 +57,15 @@ export function VehiculosModule() {
     const mantencionesProximasFecha = vehiculosData.filter(v => {
         if (!v.proximaMantencion) return false;
         const prox = new Date(v.proximaMantencion);
-        return isBefore(prox, nextWeek) && v.estado !== 'mantencion';
+        return !isNaN(prox.getTime()) && isBefore(prox, nextWeek) && v.estado !== 'mantencion';
     }).length;
 
     const mantencionesProximasKm = vehiculosData.filter(v => {
-        if (!v.proximaMantencionKm || !v.kilometraje) return false;
-        const diff = v.proximaMantencionKm - v.kilometraje;
-        return diff > 0 && diff <= 1000 && v.estado !== 'mantencion';
+        const proxKm = Number(v.proximaMantencionKm);
+        const currentKm = Number(v.kilometraje);
+        if (!proxKm || isNaN(proxKm) || !currentKm || isNaN(currentKm)) return false;
+        const diff = proxKm - currentKm;
+        return diff >= 0 && diff <= 1000 && v.estado !== 'mantencion';
     }).length;
 
     const { execute, loading: isActionLoading } = useApi();
@@ -104,33 +123,8 @@ export function VehiculosModule() {
     const confirmDelete = async (justification: string) => {
         if (!vehicleToDelete) return;
 
-        // Flow for EVERYONE: Send a deletion request
-        const vehiculo = vehiculosData.find(v => v.id === vehicleToDelete);
-        const vehName = vehiculo ? `${vehiculo.marca} ${vehiculo.modelo} (${vehiculo.id})` : vehicleToDelete;
-
-        await execute(
-            auditoriaApi.create({
-                modulo: 'Vehículos',
-                accion: 'solicitud_eliminacion',
-                mensaje: JSON.stringify({
-                    entity: 'vehiculos',
-                    id: vehicleToDelete,
-                    name: vehName,
-                    justification: justification
-                }),
-                tipo: 'warning',
-                usuario: user?.email || 'Usuario',
-                justificacion: justification
-            }),
-            {
-                successMessage: "Solicitud de eliminación enviada para aprobación del administrador.",
-                onSuccess: () => {
-                    setIsDeleteDialogOpen(false);
-                    setVehicleToDelete(null);
-                    queryClient.invalidateQueries({ queryKey: ['activity-alerts'] });
-                }
-            }
-        );
+        // DIRECT DELETION (Bypassing approval request as requested)
+        await handleDeleteAction(vehicleToDelete, justification);
     };
 
     const handleSubmit = (data: Partial<Vehiculo>) => {
@@ -170,29 +164,7 @@ export function VehiculosModule() {
                 )}
             </div>
 
-            {/* Dashboard de Mantenimiento */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <KPICard
-                    title="Total Vehículos"
-                    value={vehiculosData.length.toString()}
-                    icon={Car}
-                    variant="default"
-                />
-                <KPICard
-                    title="Próx. Mantención (7d)"
-                    value={mantencionesProximasFecha.toString()}
-                    icon={Calendar}
-                    variant={mantencionesProximasFecha > 0 ? "warning" : "default"}
-                    subtitle="Alertas por fecha"
-                />
-                <KPICard
-                    title="Próx. Mantención (1k km)"
-                    value={mantencionesProximasKm.toString()}
-                    icon={Gauge}
-                    variant={mantencionesProximasKm > 0 ? "warning" : "default"}
-                    subtitle="Alertas por kilometraje"
-                />
-            </div>
+
 
             {/* Vehicles Table */}
             {
@@ -217,13 +189,13 @@ export function VehiculosModule() {
                                 <thead>
                                     <tr>
                                         <th>Patente</th>
-                                        <th>Marca/Modelo</th>
-                                        <th>Año</th>
+                                        <th>Vehículo</th>
                                         <th>Tipo</th>
                                         <th>Estado</th>
                                         <th>Kilometraje</th>
                                         <th>Últ. Mantención</th>
                                         <th>Próx. Mantención</th>
+                                        <th>Próx. KM</th>
                                         <th>Responsable</th>
                                         <th>Ubicación</th>
                                         {canEdit && <th>Acciones</th>}
@@ -239,12 +211,16 @@ export function VehiculosModule() {
                                                 </span>
                                             </td>
                                             <td>
-                                                <div>
-                                                    <p className="font-medium">{vehiculo.marca}</p>
-                                                    <p className="text-sm text-muted-foreground">{vehiculo.modelo}</p>
+                                                <div className="flex flex-col">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-bold text-foreground">{vehiculo.marca}</span>
+                                                        <span className="px-2 py-0.5 rounded text-[10px] font-black bg-slate-200 text-slate-800 border border-slate-300">
+                                                            {vehiculo.anio}
+                                                        </span>
+                                                    </div>
+                                                    <span className="text-xs text-muted-foreground">{vehiculo.modelo}</span>
                                                 </div>
                                             </td>
-                                            <td>{vehiculo.anio}</td>
                                             <td>
                                                 <span className="text-sm bg-secondary px-2 py-1 rounded">
                                                     {vehiculo.tipo}
@@ -275,24 +251,59 @@ export function VehiculosModule() {
                                                     '-'
                                                 }
                                             </td>
+                                            <td className="font-mono">
+                                                {vehiculo.proximaMantencionKm ?
+                                                    `${vehiculo.proximaMantencionKm.toLocaleString()} km` :
+                                                    '-'
+                                                }
+                                            </td>
                                             <td>{vehiculo.responsable}</td>
                                             <td>{vehiculo.ubicacion}</td>
                                             {canEdit && (
                                                 <td>
-                                                    <div className="flex gap-2">
+                                                    <div className="flex gap-2 justify-end px-2">
                                                         <Button
-                                                            size="sm"
-                                                            variant="ghost"
+                                                            size="icon"
+                                                            variant="outline"
+                                                            className="h-9 w-9 text-orange-500 border-orange-500/30 hover:bg-orange-500/10 hover:border-orange-500 hover:text-orange-600 transition-all duration-300 shadow-sm"
+                                                            onClick={async () => {
+                                                                const payload = {
+                                                                    activoId: vehiculo.id,
+                                                                    responsable: vehiculo.responsable,
+                                                                    fecha: new Date().toLocaleDateString('es-CL'),
+                                                                    cargo: 'Operario / Responsable de Vehículo',
+                                                                    equipo: `Vehículo: ${vehiculo.marca} ${vehiculo.modelo}`,
+                                                                    patente: vehiculo.id,
+                                                                    marca: vehiculo.marca,
+                                                                    modelo: vehiculo.modelo
+                                                                };
+
+                                                                await execute(actasApi.generateCargo(payload), {
+                                                                    successMessage: "✅ Hoja de Cargo generada en sistema.",
+                                                                    onSuccess: () => triggerPrint(payload)
+                                                                });
+                                                            }}
+                                                            title="Generar e Imprimir Hoja de Cargo"
+                                                        >
+                                                            <Printer className="w-4 h-4" />
+                                                        </Button>
+                                                        <Button
+                                                            size="icon"
+                                                            variant="outline"
+                                                            className="h-9 w-9 text-blue-400 border-blue-400/30 hover:bg-blue-400/10 hover:border-blue-400 hover:text-blue-300 transition-all duration-300 shadow-sm"
                                                             onClick={() => handleEdit(vehiculo)}
+                                                            title="Editar Vehículo"
                                                         >
                                                             <Edit className="w-4 h-4" />
                                                         </Button>
                                                         <Button
-                                                            size="sm"
-                                                            variant="ghost"
+                                                            size="icon"
+                                                            variant="outline"
+                                                            className="h-9 w-9 text-rose-500 border-rose-500/30 hover:bg-rose-500/10 hover:border-rose-500 hover:text-rose-600 transition-all duration-300 shadow-sm"
                                                             onClick={() => handleDelete(vehiculo.id)}
+                                                            title="Eliminar Vehículo"
                                                         >
-                                                            <Trash2 className="w-4 h-4 text-destructive" />
+                                                            <Trash2 className="w-4 h-4" />
                                                         </Button>
                                                     </div>
                                                 </td>
@@ -329,6 +340,13 @@ export function VehiculosModule() {
                 isAdmin={isAdmin}
                 isCritical={true}
             />
+
+            {/* Componente de Impresión (Fuera del visor normal pero no hidden para react-to-print) */}
+            <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
+                {printingData && (
+                    <PrintableCargoForm ref={printRef} data={printingData} />
+                )}
+            </div>
         </div >
     );
 }

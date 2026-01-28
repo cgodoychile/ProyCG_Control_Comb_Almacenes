@@ -41,26 +41,25 @@ function getAllMantenciones() {
     const data = sheet.getDataRange().getValues();
     if (data.length <= 1) return createResponse(true, []);
     
-    // Skip header
     const rows = data.slice(1);
-    const mantenciones = rows.map((row, index) => {
-       // Filter empty rows
-       if (!row[COLUMNS.MANTENCIONES.ID]) return null;
+    const mantenciones = rows.map((row) => {
+        const id = row[0]; // ID
+        if (!id) return null;
 
-       return {
-         id: row[COLUMNS.MANTENCIONES.ID],
-         fechaIngreso: row[COLUMNS.MANTENCIONES.FECHA_INGRESO],
-         vehiculo: row[COLUMNS.MANTENCIONES.VEHICULO],
-         tipoMantencion: row[COLUMNS.MANTENCIONES.TIPO_MANTENCION],
-         kmActual: row[COLUMNS.MANTENCIONES.KM_ACTUAL],
-         proximaMantencionKm: row[COLUMNS.MANTENCIONES.PROXIMA_MANTENCION_KM],
-         proximaMantencionFecha: row[COLUMNS.MANTENCIONES.PROXIMA_MANTENCION_FECHA],
-         taller: row[COLUMNS.MANTENCIONES.TALLER],
-         costo: row[COLUMNS.MANTENCIONES.COSTO],
-         observaciones: row[COLUMNS.MANTENCIONES.OBSERVACIONES],
-         estado: row[COLUMNS.MANTENCIONES.ESTADO],
-         responsable: row[COLUMNS.MANTENCIONES.RESPONSABLE]
-       };
+        return {
+          id: id,
+          fechaIngreso: row[1],           // FECHA_INGRESO (B)
+          vehiculo: row[2],               // VEHICULO (C)
+          tipoMantencion: row[3],          // TIPO_MANTENCION (D)
+          kmActual: row[4],               // KM_ACTUAL (E)
+          proximaMantencionKm: row[5],     // PROXIMA_MANTENCION_KM (F)
+          proximaMantencionFecha: row[6],  // PROXIMA_MANTENCION_FECHA (G)
+          taller: row[7],                 // TALLER (H)
+          costo: row[8],                  // COSTO (I)
+          observaciones: row[9],           // OBSERVACION (J)
+          estado: row[10],                 // ESTADO (K)
+          responsable: row[11]             // RESPONSABLE (L)
+        };
     }).filter(m => m !== null);
     
     return createResponse(true, mantenciones);
@@ -74,30 +73,34 @@ function createMantencion(data) {
     const sheet = getSheet(SHEET_NAMES.MANTENCIONES);
     ensureMantencionesHeaders(sheet);
     
-    // Idempotency check
+    // Verificación de Idempotencia
     const duplicateResponse = checkIdempotency(sheet, data.clientRequestId, COLUMNS.MANTENCIONES.ID);
-    console.log('Creando mantención con datos:', JSON.stringify(data));
+    if (duplicateResponse) return duplicateResponse;
+
+    // ALWAYS generate sequential ID: MANT-0001
+    const id = generateSequentialId('MANT', SHEET_NAMES.MANTENCIONES, 'ID', 4);
     
-    const id = data.clientRequestId || generateId('MANT');
+    // LITERAL MAPPING (Indestructible)
     const newRow = Array(12).fill('');
+    newRow[0] = id;                                       // ID
+    newRow[1] = formatDate(data.fechaIngreso || new Date()); // FECHA
+    newRow[2] = data.vehiculo || '';                      // VEHICULO
+    newRow[3] = data.tipoMantencion || '';                // TIPO
+    newRow[4] = parseFloat(data.kmActual) || 0;           // KM_ACTUAL
+    newRow[5] = parseFloat(data.proximaMantencionKm) || 0; // PROX_KM
+    newRow[6] = data.proximaMantencionFecha ? formatDate(data.proximaMantencionFecha) : ''; // G
+    newRow[7] = data.taller || '';                        // TALLER
+    newRow[8] = parseFloat(data.costo) || 0;              // COSTO
+    newRow[9] = data.observaciones || data.observacion || ''; // OBSERVACION
+    newRow[10] = data.estado || 'Completada';             // ESTADO
+    newRow[11] = data.responsable || '';                  // RESPONSABLE
     
-    newRow[COLUMNS.MANTENCIONES.ID] = id;
-    newRow[COLUMNS.MANTENCIONES.FECHA_INGRESO] = data.fechaIngreso || '';
-    newRow[COLUMNS.MANTENCIONES.VEHICULO] = data.vehiculo || '';
-    newRow[COLUMNS.MANTENCIONES.TIPO_MANTENCION] = data.tipoMantencion || '';
-    newRow[COLUMNS.MANTENCIONES.KM_ACTUAL] = data.kmActual || 0;
-    newRow[COLUMNS.MANTENCIONES.PROXIMA_MANTENCION_KM] = data.proximaMantencionKm || '';
-    newRow[COLUMNS.MANTENCIONES.PROXIMA_MANTENCION_FECHA] = data.proximaMantencionFecha || '';
-    newRow[COLUMNS.MANTENCIONES.TALLER] = data.taller || '';
-    newRow[COLUMNS.MANTENCIONES.COSTO] = data.costo || 0;
-    newRow[COLUMNS.MANTENCIONES.OBSERVACION] = data.observaciones || '';
-    newRow[COLUMNS.MANTENCIONES.ESTADO] = data.estado || 'Completada';
-    newRow[COLUMNS.MANTENCIONES.RESPONSABLE] = data.responsable || '';
-    
+    console.log("GUARDANDO LITERAL:", newRow);
     sheet.appendRow(newRow);
     
     // Audit Log
-    registrarAccion('Mantenciones', 'crear', `Nueva mantención registrada: ${data.tipoMantencion} para vehículo ${data.vehiculo}`, 'success', data.responsable);
+    registrarAccion('Mantenciones', 'crear', `Nueva mantención registrada: ${id} para vehículo ${data.vehiculo}`, 'success', data.responsable);
+    createAlerta('Mantenciones', 'success', `Nueva mantención: ${id} (${data.vehiculo})`, data.responsable);
     
     // Sync with Vehiculos sheet
     if (data.vehiculo && data.kmActual) {
@@ -120,15 +123,27 @@ function updateVehiculoMileage(patente, km, fecha) {
     const vData = vSheet.getDataRange().getValues();
     const patId = patente.toString().trim().toUpperCase();
     
+    // Dynamic Mapping for Vehicles
+    const vColInfo = findColumnIndices(vSheet, {
+        PATENTE: ['PATENTE', 'ID', 'CODIGO'],
+        KILOMETRAJE: ['KILOMETRAJE', 'KM'],
+        ULTIMA: ['ULTIMA_MANTENCION', 'ULTIMA']
+    });
+    
+    const vMap = vColInfo;
+    const patIdx = (vMap.PATENTE !== undefined && vMap.PATENTE !== -1) ? vMap.PATENTE : 0;
+    const kmIdx = (vMap.KILOMETRAJE !== undefined && vMap.KILOMETRAJE !== -1) ? vMap.KILOMETRAJE : 5;
+    const ultIdx = (vMap.ULTIMA !== undefined && vMap.ULTIMA !== -1) ? vMap.ULTIMA : 7;
+    
     for (let i = 1; i < vData.length; i++) {
-      if (vData[i][COLUMNS.VEHICULOS.PATENTE].toString().trim().toUpperCase() === patId) {
-        const currentKm = Number(vData[i][COLUMNS.VEHICULOS.KILOMETRAJE]) || 0;
+      if (String(vData[i][patIdx]).trim().toUpperCase() === patId) {
+        const currentKm = Number(vData[i][kmIdx]) || 0;
         // Only update if reported KM is higher
         if (Number(km) > currentKm) {
-          vSheet.getRange(i + 1, COLUMNS.VEHICULOS.KILOMETRAJE + 1).setValue(km);
+          vSheet.getRange(i + 1, kmIdx + 1).setValue(km);
         }
         // Update last maintenance date
-        vSheet.getRange(i + 1, COLUMNS.VEHICULOS.ULTIMA_MANTENCION + 1).setValue(fecha);
+        vSheet.getRange(i + 1, ultIdx + 1).setValue(fecha);
         break;
       }
     }
@@ -142,41 +157,61 @@ function updateMantencion(id, data) {
      const sheet = getSheet(SHEET_NAMES.MANTENCIONES);
      const dataValues = sheet.getDataRange().getValues();
      
+     const colInfo = findColumnIndices(sheet, {
+        ID: ['ID', 'CODIGO'],
+        FECHA: ['FECHA_INGRESO', 'FECHA'],
+        VEHICULO: ['VEHICULO'],
+        KM: ['KM_ACTUAL', 'KM'],
+        ESTADO: ['ESTADO']
+     });
+     const m = colInfo;
+     const idIdx = (m.ID !== undefined && m.ID !== -1) ? m.ID : 0;
+     
      let rowIndex = -1;
-     // Find row by ID (String comparison)
      for (let i = 1; i < dataValues.length; i++) {
-        if (dataValues[i][COLUMNS.MANTENCIONES.ID].toString() === id.toString()) {
-           rowIndex = i + 1; // 1-based index
+        if (String(dataValues[i][idIdx]) === String(id)) {
+           rowIndex = i + 1;
            break;
         }
      }
      
      if (rowIndex > 1) {
-        const range = sheet.getRange(rowIndex, 1, 1, 12);
-        const currentValues = range.getValues()[0];
-        const newValues = [...currentValues];
-        
-        // Update fields if present in data
-        if (data.fechaIngreso) newValues[COLUMNS.MANTENCIONES.FECHA_INGRESO] = data.fechaIngreso;
-        if (data.vehiculo) newValues[COLUMNS.MANTENCIONES.VEHICULO] = data.vehiculo;
-        if (data.tipoMantencion) newValues[COLUMNS.MANTENCIONES.TIPO_MANTENCION] = data.tipoMantencion;
-        if (data.kmActual !== undefined) newValues[COLUMNS.MANTENCIONES.KM_ACTUAL] = data.kmActual;
-        if (data.proximaMantencionKm !== undefined) newValues[COLUMNS.MANTENCIONES.PROXIMA_MANTENCION_KM] = data.proximaMantencionKm;
-        if (data.proximaMantencionFecha) newValues[COLUMNS.MANTENCIONES.PROXIMA_MANTENCION_FECHA] = data.proximaMantencionFecha;
-        if (data.taller) newValues[COLUMNS.MANTENCIONES.TALLER] = data.taller;
-        if (data.costo !== undefined) newValues[COLUMNS.MANTENCIONES.COSTO] = data.costo;
-        if (data.observaciones) newValues[COLUMNS.MANTENCIONES.OBSERVACIONES] = data.observaciones;
-        if (data.estado) newValues[COLUMNS.MANTENCIONES.ESTADO] = data.estado;
-        if (data.responsable) newValues[COLUMNS.MANTENCIONES.RESPONSABLE] = data.responsable;
-        
-        range.setValues([newValues]);
-        // Audit Log
-        registrarAccion('Mantenciones', 'actualizar', `Mantención actualizada: ${id} (Vehículo: ${data.vehiculo || currentValues[COLUMNS.MANTENCIONES.VEHICULO]})`, 'info', data.responsable);
+          // Mapping extendido para actualización literal
+          const fullColInfo = findColumnIndices(sheet, {
+            ID: ['ID'], FECHA: ['FECHA_INGRESO'], VEHICULO: ['VEHICULO'], TIPO: ['TIPO_MANTENCION'],
+            KM: ['KM_ACTUAL'], PROX_KM: ['PROXIMA_MANTENCION_KM'], PROX_DATE: ['PROXIMA_MANTENCION_FECHA'],
+            TALLER: ['TALLER'], COSTO: ['COSTO'], OBS: ['OBSERVACION', 'OBSERVACIONES'],
+            ESTADO: ['ESTADO'], RESPONSABLE: ['RESPONSABLE']
+          });
+          const fullMap = fullColInfo;
 
-        // Sync with Vehiculos if KM or Vehicle changed
-        const vehId = data.vehiculo || currentValues[COLUMNS.MANTENCIONES.VEHICULO];
-        const kmVal = data.kmActual !== undefined ? data.kmActual : currentValues[COLUMNS.MANTENCIONES.KM_ACTUAL];
-        const fechaVal = data.fechaIngreso || currentValues[COLUMNS.MANTENCIONES.FECHA_INGRESO];
+          const setVal = (key, val) => {
+            if (fullMap[key] !== -1 && val !== undefined) {
+              sheet.getRange(rowIndex, fullMap[key] + 1).setValue(val);
+            }
+          };
+
+          if (data.fechaIngreso !== undefined) setVal('FECHA', formatDate(data.fechaIngreso));
+          if (data.vehiculo !== undefined) setVal('VEHICULO', data.vehiculo);
+          if (data.tipoMantencion !== undefined) setVal('TIPO', data.tipoMantencion);
+          if (data.kmActual !== undefined) setVal('KM', data.kmActual);
+          if (data.proximaMantencionKm !== undefined) setVal('PROX_KM', data.proximaMantencionKm);
+          if (data.proximaMantencionFecha !== undefined) setVal('PROX_DATE', formatDate(data.proximaMantencionFecha));
+          if (data.taller !== undefined) setVal('TALLER', data.taller);
+          if (data.costo !== undefined) setVal('COSTO', data.costo);
+          
+          const obs = data.observaciones !== undefined ? data.observaciones : data.observacion;
+          if (obs !== undefined) setVal('OBS', obs);
+          
+          if (data.estado !== undefined) setVal('ESTADO', data.estado);
+          if (data.responsable !== undefined) setVal('RESPONSABLE', data.responsable);
+
+        const currentValues = dataValues[rowIndex - 1];
+        const vehId = data.vehiculo || currentValues[fullMap.VEHICULO !== -1 ? fullMap.VEHICULO : 2];
+        registrarAccion('Mantenciones', 'actualizar', `Mantención actualizada: ${id} (Vehículo: ${vehId})`, 'info', data.responsable);
+
+        const kmVal = data.kmActual !== undefined ? data.kmActual : currentValues[fullMap.KM !== -1 ? fullMap.KM : 4];
+        const fechaVal = data.fechaIngreso !== undefined ? data.fechaIngreso : currentValues[fullMap.FECHA !== -1 ? fullMap.FECHA : 1];
         
         if (vehId && kmVal) {
           updateVehiculoMileage(vehId, kmVal, fechaVal);
@@ -184,7 +219,7 @@ function updateMantencion(id, data) {
 
         return createResponse(true, { id, ...data }, "Mantención actualizada");
      }
-     return createResponse(false, null, "ID no encontrado");
+     throw new Error("ID no encontrado: " + id);
   } catch (error) {
     return createResponse(false, null, error.toString());
   }
@@ -195,24 +230,20 @@ function deleteMantencion(id, data) {
     const sheet = getSheet(SHEET_NAMES.MANTENCIONES);
     const dataValues = sheet.getDataRange().getValues();
     
-    let rowIndex = -1;
+    const colInfo = findColumnIndices(sheet, { ID: ['ID', 'CODIGO'], VEH: ['VEHICULO'] });
+    const idIdx = (colInfo.ID !== undefined && colInfo.ID !== -1) ? colInfo.ID : 0;
+    const vehIdx = (colInfo.VEH !== undefined && colInfo.VEH !== -1) ? colInfo.VEH : 2;
+
     for (let i = 1; i < dataValues.length; i++) {
-      if (dataValues[i][COLUMNS.MANTENCIONES.ID].toString() === id.toString()) {
-        rowIndex = i + 1;
-        break;
-      }
+        if (String(dataValues[i][idIdx]) === String(id)) {
+            const vehiculo = dataValues[i][vehIdx];
+            sheet.deleteRow(i + 1);
+            
+            registrarAccion('Mantenciones', 'eliminar', `Mantención eliminada: ${id} (Vehículo: ${vehiculo})`, 'warning', null, data ? data.justificacion : null);
+            return createResponse(true, null, "Mantención eliminada");
+        }
     }
-    
-    if (rowIndex > 1) {
-      const vehiculo = dataValues[rowIndex - 1][COLUMNS.MANTENCIONES.VEHICULO];
-      sheet.deleteRow(rowIndex);
-      
-      // Audit Log
-      registrarAccion('Mantenciones', 'eliminar', `Mantención eliminada: ${id} (Vehículo: ${vehiculo})`, 'warning', null, data ? data.justificacion : null);
-      
-      return createResponse(true, null, "Mantención eliminada");
-    }
-    return createResponse(false, null, "ID no encontrado");
+    throw new Error("ID no encontrado: " + id);
   } catch (error) {
     return createResponse(false, null, error.toString());
   }

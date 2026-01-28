@@ -31,6 +31,9 @@ export function ActivoForm({ open, onClose, onSubmit, initialData, almacenes = [
             id: '',
             nombre: '',
             categoria: '',
+            marca: '',
+            modelo: '',
+            numeroSerie: '',
             ubicacion: '',
             estado: 'operativo',
             fechaAdquisicion: getLocalDate(),
@@ -45,15 +48,32 @@ export function ActivoForm({ open, onClose, onSubmit, initialData, almacenes = [
 
     // Initialize custom category state if editing existing item with potentially custom category
     useEffect(() => {
-        if (initialData?.categoria) {
+        if (initialData) {
+            reset(initialData);
             const predefined = ['Camión', 'Camioneta', 'Automóvil', 'Maquinaria', 'Generador', 'Otro'];
-            if (!predefined.includes(initialData.categoria)) {
+            if (initialData.categoria && !predefined.includes(initialData.categoria)) {
                 setValue('categoria', 'Otro');
                 setCustomCategory(initialData.categoria);
                 setIsCustomCategory(true);
+            } else {
+                setIsCustomCategory(false);
             }
+        } else {
+            reset({
+                id: '',
+                nombre: '',
+                categoria: '',
+                marca: '',
+                modelo: '',
+                numeroSerie: '',
+                ubicacion: '',
+                estado: 'operativo',
+                fechaAdquisicion: getLocalDate(),
+                valorInicial: 0,
+                responsable: '',
+            });
         }
-    }, [initialData, setValue]);
+    }, [initialData, reset, setValue]);
 
     const onFormSubmit = async (data: ActivoFormData) => {
         // If custom category is used, override the "Otro" value
@@ -74,14 +94,15 @@ export function ActivoForm({ open, onClose, onSubmit, initialData, almacenes = [
             title={initialData ? 'Editar Activo' : 'Nuevo Activo'}
             description="Complete los datos del activo (vehículo o equipo)"
         >
-            <div className="grid gap-4 py-4">
+            <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
                 {/* Patente / ID */}
                 <div className="grid gap-2">
-                    <Label htmlFor="id">Patente / ID Activo *</Label>
+                    <Label htmlFor="id">ID de Activo {initialData ? '*' : '(Automático)'}</Label>
                     <Input
                         id="id"
                         {...register('id')}
-                        placeholder="Ej: ABC-123, GEN-001"
+                        disabled={!initialData}
+                        placeholder={initialData ? "ID del activo" : "ACT-XXXX (Se genera al guardar)"}
                     />
                     {errors.id && (
                         <p className="text-sm text-destructive">{errors.id.message}</p>
@@ -90,51 +111,115 @@ export function ActivoForm({ open, onClose, onSubmit, initialData, almacenes = [
 
                 {/* Nombre */}
                 <div className="grid gap-2">
-                    <Label htmlFor="nombre">Nombre *</Label>
+                    <Label htmlFor="nombre">Nombre del Equipo *</Label>
                     <Input
                         id="nombre"
                         {...register('nombre')}
-                        placeholder="Ej: Camión Tolva ABC-123"
+                        placeholder="Ej: Generador Eléctrico 50kVA"
                     />
                     {errors.nombre && (
                         <p className="text-sm text-destructive">{errors.nombre.message}</p>
                     )}
                 </div>
 
-                {/* Categoría */}
-                <div className="grid gap-2">
-                    <Label htmlFor="categoria">Categoría *</Label>
-                    <div className="flex flex-col gap-2">
-                        <Select
-                            onValueChange={(value) => {
-                                setValue('categoria', value);
-                                setIsCustomCategory(value === 'Otro');
-                            }}
-                            defaultValue={isCustomCategory ? 'Otro' : initialData?.categoria}
-                        >
-                            <SelectTrigger>
-                                <SelectValue placeholder="Seleccione una categoría" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="Camión">Camión</SelectItem>
-                                <SelectItem value="Camioneta">Camioneta</SelectItem>
-                                <SelectItem value="Automóvil">Automóvil</SelectItem>
-                                <SelectItem value="Maquinaria">Maquinaria</SelectItem>
-                                <SelectItem value="Generador">Generador</SelectItem>
-                                <SelectItem value="Otro">Otro (Especifique)</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        {isCustomCategory && (
-                            <Input
-                                placeholder="Escriba la categoría personalizada"
-                                value={customCategory}
-                                onChange={(e) => setCustomCategory(e.target.value)}
-                            />
+                <div className="grid grid-cols-2 gap-4">
+                    {/* Marca */}
+                    <div className="grid gap-2">
+                        <Label htmlFor="marca">Marca *</Label>
+                        <Input
+                            id="marca"
+                            {...register('marca')}
+                            placeholder="Ej: Caterpillar"
+                        />
+                        {errors.marca && (
+                            <p className="text-sm text-destructive">{errors.marca.message}</p>
                         )}
                     </div>
-                    {errors.categoria && (
-                        <p className="text-sm text-destructive">{errors.categoria.message}</p>
+
+                    {/* Modelo */}
+                    <div className="grid gap-2">
+                        <Label htmlFor="modelo">Modelo *</Label>
+                        <Input
+                            id="modelo"
+                            {...register('modelo')}
+                            placeholder="Ej: XQ60"
+                        />
+                        {errors.modelo && (
+                            <p className="text-sm text-destructive">{errors.modelo.message}</p>
+                        )}
+                    </div>
+                </div>
+
+                {/* Número de Serie */}
+                <div className="grid gap-2">
+                    <Label htmlFor="numeroSerie">Número de Serie / N/S *</Label>
+                    <Input
+                        id="numeroSerie"
+                        {...register('numeroSerie')}
+                        placeholder="Ej: S-987654321"
+                    />
+                    {errors.numeroSerie && (
+                        <p className="text-sm text-destructive">{errors.numeroSerie.message}</p>
                     )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    {/* Categoría */}
+                    <div className="grid gap-2">
+                        <Label htmlFor="categoria">Categoría *</Label>
+                        <div className="flex flex-col gap-2">
+                            <Select
+                                onValueChange={(value) => {
+                                    setValue('categoria', value);
+                                    setIsCustomCategory(value === 'Otro');
+                                }}
+                                defaultValue={isCustomCategory ? 'Otro' : initialData?.categoria}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Categoría" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Camión">Camión</SelectItem>
+                                    <SelectItem value="Camioneta">Camioneta</SelectItem>
+                                    <SelectItem value="Automóvil">Automóvil</SelectItem>
+                                    <SelectItem value="Maquinaria">Maquinaria</SelectItem>
+                                    <SelectItem value="Generador">Generador</SelectItem>
+                                    <SelectItem value="Otro">Otro</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            {isCustomCategory && (
+                                <Input
+                                    placeholder="Especifique..."
+                                    value={customCategory}
+                                    onChange={(e) => setCustomCategory(e.target.value)}
+                                />
+                            )}
+                        </div>
+                        {errors.categoria && (
+                            <p className="text-sm text-destructive">{errors.categoria.message}</p>
+                        )}
+                    </div>
+
+                    {/* Estado */}
+                    <div className="grid gap-2">
+                        <Label htmlFor="estado">Estado *</Label>
+                        <Select
+                            onValueChange={(value) => setValue('estado', value as 'operativo' | 'mantencion' | 'fuera_servicio')}
+                            defaultValue={initialData?.estado || 'operativo'}
+                        >
+                            <SelectTrigger>
+                                <SelectValue placeholder="Estado" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="operativo">Operativo</SelectItem>
+                                <SelectItem value="mantencion">En Mantención</SelectItem>
+                                <SelectItem value="fuera_servicio">Fuera de Servicio</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        {errors.estado && (
+                            <p className="text-sm text-destructive">{errors.estado.message}</p>
+                        )}
+                    </div>
                 </div>
 
                 {/* Ubicación (Bodega o Manual) */}
@@ -151,7 +236,7 @@ export function ActivoForm({ open, onClose, onSubmit, initialData, almacenes = [
                             <SelectItem value="En Terreno">En Terreno</SelectItem>
                             <SelectItem value="Taller Externo">Taller Externo</SelectItem>
                             {almacenes.map((a: any) => (
-                                <SelectItem key={a.id} value={a.nombre}>{a.nombre} (Bodega)</SelectItem>
+                                <SelectItem key={a.id} value={a.id}>{a.nombre} (Bodega)</SelectItem>
                             ))}
                             <SelectItem value="Otra">Otra (Manual)</SelectItem>
                         </SelectContent>
@@ -178,52 +263,34 @@ export function ActivoForm({ open, onClose, onSubmit, initialData, almacenes = [
                     )}
                 </div>
 
-                {/* Estado */}
-                <div className="grid gap-2">
-                    <Label htmlFor="estado">Estado *</Label>
-                    <Select
-                        onValueChange={(value) => setValue('estado', value as 'operativo' | 'mantencion' | 'fuera_servicio')}
-                        defaultValue={initialData?.estado || 'operativo'}
-                    >
-                        <SelectTrigger>
-                            <SelectValue placeholder="Seleccione el estado" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="operativo">Operativo</SelectItem>
-                            <SelectItem value="mantencion">En Mantención</SelectItem>
-                            <SelectItem value="fuera_servicio">Fuera de Servicio</SelectItem>
-                        </SelectContent>
-                    </Select>
-                    {errors.estado && (
-                        <p className="text-sm text-destructive">{errors.estado.message}</p>
-                    )}
-                </div>
 
-                {/* Fecha de Adquisición */}
-                <div className="grid gap-2">
-                    <Label htmlFor="fechaAdquisicion">Fecha de Adquisición *</Label>
-                    <Input
-                        id="fechaAdquisicion"
-                        type="date"
-                        {...register('fechaAdquisicion')}
-                    />
-                    {errors.fechaAdquisicion && (
-                        <p className="text-sm text-destructive">{errors.fechaAdquisicion.message}</p>
-                    )}
-                </div>
+                <div className="grid grid-cols-2 gap-4">
+                    {/* Fecha de Adquisición */}
+                    <div className="grid gap-2">
+                        <Label htmlFor="fechaAdquisicion">Fecha de Adquisición *</Label>
+                        <Input
+                            id="fechaAdquisicion"
+                            type="date"
+                            {...register('fechaAdquisicion')}
+                        />
+                        {errors.fechaAdquisicion && (
+                            <p className="text-sm text-destructive">{errors.fechaAdquisicion.message}</p>
+                        )}
+                    </div>
 
-                {/* Valor Inicial */}
-                <div className="grid gap-2">
-                    <Label htmlFor="valorInicial">Valor Inicial (CLP) *</Label>
-                    <Input
-                        id="valorInicial"
-                        type="number"
-                        {...register('valorInicial', { valueAsNumber: true })}
-                        placeholder="0"
-                    />
-                    {errors.valorInicial && (
-                        <p className="text-sm text-destructive">{errors.valorInicial.message}</p>
-                    )}
+                    {/* Valor Inicial */}
+                    <div className="grid gap-2">
+                        <Label htmlFor="valorInicial">Valor Inicial (CLP) *</Label>
+                        <Input
+                            id="valorInicial"
+                            type="number"
+                            {...register('valorInicial', { valueAsNumber: true })}
+                            placeholder="0"
+                        />
+                        {errors.valorInicial && (
+                            <p className="text-sm text-destructive">{errors.valorInicial.message}</p>
+                        )}
+                    </div>
                 </div>
 
                 {/* Responsable */}

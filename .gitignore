@@ -25,3 +25,22 @@ dist-ssr
 
 .env
 .vercel
+*.md
+!README.md
+!walkthrough.md
+!implementation_plan.md
+*.js
+!vite.config.ts
+!postcss.config.js
+!tailwind.config.ts
+!eslint.config.js
+!src/**/*
+!public/**/*
+!docs/**/*
+list.txt
+list_deployments.txt
+list_prod.txt
+profile-photo.png
+RECALCULAR_STOCK.js
+debug-connection.js
+test-backend.js

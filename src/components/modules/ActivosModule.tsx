@@ -1,17 +1,18 @@
 import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { activosApi, almacenesApi, productosAlmacenApi, auditoriaApi } from '@/lib/apiService';
+import { activosApi, almacenesApi, productosAlmacenApi, auditoriaApi, actasApi } from '@/lib/apiService';
 import { useApi } from '@/hooks/useApi';
 import { ActivoForm } from '@/components/forms/ActivoForm';
 import { ActivoFormData } from '@/lib/validations';
 import { Button } from '@/components/ui/button';
-import { Plus, Package, Wrench, AlertCircle, Loader2, Printer, Camera, Search } from 'lucide-react';
+import { Plus, Package, Wrench, AlertCircle, Loader2, Printer, Camera, Search, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { Trash2, Edit } from 'lucide-react';
 import { speakSuccess } from '@/utils/voiceNotification';
 import { useReactToPrint } from 'react-to-print';
 import { AssetLabel } from '@/components/assets/AssetLabel';
+import { PrintableCargoForm } from '@/components/shared/PrintableCargoForm';
 import { BarcodeScanner } from '@/components/shared/BarcodeScanner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -31,9 +32,25 @@ export function ActivosModule() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [activoToDelete, setActivoToDelete] = useState<any>(null);
   const [deleteFromWarehouse, setDeleteFromWarehouse] = useState(false);
+  const [printingData, setPrintingData] = useState<any>(null);
+
   const labelRef = useRef<HTMLDivElement>(null);
+  const printRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const handlePrintActa = useReactToPrint({
+    contentRef: printRef,
+    documentTitle: `Acta_Cargo_${printingData?.responsable || 'Activo'}`,
+    onAfterPrint: () => setPrintingData(null)
+  });
+
+  const triggerPrint = (data: any) => {
+    setPrintingData(data);
+    setTimeout(() => {
+      if (handlePrintActa) handlePrintActa();
+    }, 300);
+  };
 
   // Data Fetching
   const { data: activosResponse, isLoading: loadingActivos } = useQuery({
@@ -91,46 +108,16 @@ export function ActivosModule() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async ({ id, justification, deleteFromBodega }: { id: string; justification: string; deleteFromBodega: boolean }) => {
-      // 1. Delete original asset
-      const response = await activosApi.delete(id, { justificacion: justification });
-      if (!response.success) {
-        throw new Error(response.message || "Error al eliminar el activo");
-      }
-
-      // 2. Delete from warehouse if requested
-      if (deleteFromBodega) {
-        try {
-          // Fetch all products to find the one linked to this asset
-          const productsResponse = await productosAlmacenApi.getAll();
-          const products = productsResponse.data || [];
-
-          // The product description usually looks like "Activo: [AssetID] - [Category]"
-          // Searching for a product that mentions this asset ID in its description
-          const linkedProduct = products.find((p: any) =>
-            p.descripcion?.includes(`Activo: ${id}`) ||
-            p.nombre === activoToDelete?.nombre
-          );
-
-          if (linkedProduct) {
-            console.log('🗑️ Deleting linked warehouse product:', linkedProduct.id);
-            await productosAlmacenApi.delete(linkedProduct.id, { justificacion: `Eliminación automática por activo eliminado: ${justification}` });
-            toast({ title: "📦 Producto eliminado", description: `Se eliminó coincidencia en bodega: ${linkedProduct.nombre}` });
-          }
-        } catch (err) {
-          console.error('Error deleting linked product:', err);
-          toast({ variant: "destructive", title: "⚠️ Parcial", description: "Activo eliminado, pero no se pudo borrar de bodega." });
-        }
-      }
-
-      return response;
+    mutationFn: async ({ id, justification }: { id: string; justification: string }) => {
+      return await activosApi.delete(id, { justificacion: justification });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['activos'] });
       queryClient.invalidateQueries({ queryKey: ['productos'] });
       queryClient.invalidateQueries({ queryKey: ['almacenes'] });
-      toast({ title: "✅ Activo eliminado", description: "El activo ha sido eliminado correctamente." });
-      setDeleteFromWarehouse(false); // Reset state
+      toast({ title: "✅ Activo eliminado", description: "El activo ha sido eliminado correctamente del sistema y de bodega." });
+      setIsDeleteDialogOpen(false);
+      setActivoToDelete(null);
     },
     onError: (error: any) => {
       toast({ variant: "destructive", title: "❌ Error", description: error.message || "No se pudo eliminar el activo." });
@@ -148,48 +135,11 @@ export function ActivosModule() {
       await updateMutation.mutateAsync({ id: editingActivo.id, data });
     } else {
       await createMutation.mutateAsync(data);
-
-      // AUTO-CREATE PRODUCT IN WAREHOUSE LOGIC
-      // Check if selected location is a known warehouse
-      const warehouse = almacenes.find((a: any) => a.nombre === data.ubicacion);
-      if (warehouse) {
-        try {
-          toast({ title: "📦 Creando inventario...", description: `Agregando ${data.nombre} a ${warehouse.nombre}` });
-          // Create product payload
-          const productData = {
-            nombre: data.nombre,
-            descripcion: `Activo: ${data.id} - ${data.categoria}`,
-            categoria: data.categoria,
-            unidad: 'UNIDAD',
-            cantidad: 1, // Default quantity as per plan
-            stockMinimo: 1,
-            valorUnitario: data.valorInicial,
-            ubicacion: warehouse.ubicacion || 'Bodega',
-            almacenId: warehouse.id,
-            cantidadEnUso: 0,
-            esRetornable: true, // Assets usually are returnable
-            esActivo: true
-          };
-
-          const prodResponse = await productosAlmacenApi.create(productData);
-          if (prodResponse.success) {
-            toast({ title: "✅ Inventario creado", description: "Se creó el producto asociado en la bodega." });
-            queryClient.invalidateQueries({ queryKey: ['productos'] });
-            queryClient.invalidateQueries({ queryKey: ['almacenes'] });
-          } else {
-            console.error('Error auto-creating product:', prodResponse);
-            toast({ title: "⚠️ Atención", description: "Activo creado, pero falló la creación automática del producto en bodega." });
-          }
-        } catch (e) {
-          console.error('Exception auto-creating product:', e);
-          toast({ title: "⚠️ Atención", description: "Ocurrió un error al intentar crear el producto en bodega." });
-        }
-      }
     }
   };
 
-  // Print handler
-  const handlePrint = useReactToPrint({
+  // Print handler for labels
+  const handlePrintLabelAction = useReactToPrint({
     contentRef: labelRef,
     documentTitle: `Rotulo-${printingActivo?.id || 'Activo'}`,
   });
@@ -198,8 +148,8 @@ export function ActivosModule() {
     setPrintingActivo(activo);
     // Wait for state to update, then print
     setTimeout(() => {
-      if (handlePrint) {
-        handlePrint();
+      if (handlePrintLabelAction) {
+        handlePrintLabelAction();
       }
     }, 100);
   };
@@ -285,7 +235,8 @@ export function ActivosModule() {
             <Camera className="w-4 h-4" />
             Escanear
           </Button>
-          {/* Botón Nuevo Activo */}
+          {/* Botón Nuevo Activo - Oculto/Deshabilitado para centralizar en Almacenes */}
+          {/* 
           {canEdit && (
             <Button
               size="sm"
@@ -295,7 +246,8 @@ export function ActivosModule() {
               <Plus className="w-4 h-4" />
               Nuevo Activo
             </Button>
-          )}
+          )} 
+          */}
         </div>
       </div>
 
@@ -323,13 +275,11 @@ export function ActivosModule() {
             <thead className="bg-secondary/50">
               <tr>
                 <th>ID</th>
-                <th>Nombre</th>
+                <th>Equipo / Detalle</th>
                 <th>Categoría</th>
                 <th>Ubicación</th>
                 <th>Estado</th>
-                <th>Fecha Adquisición</th>
-                <th>Valor Inicial</th>
-                <th>Responsable</th>
+                <th className="text-right pr-4">Valor Inicial</th>
                 <th>Acciones</th>
               </tr>
             </thead>
@@ -348,23 +298,60 @@ export function ActivosModule() {
                         {activo.id}
                       </span>
                     </td>
-                    <td className="font-medium">{activo.nombre}</td>
-                    <td className="text-muted-foreground text-sm">{activo.categoria}</td>
-                    <td className="text-sm">{activo.ubicacion}</td>
-                    <td>{getStatusBadge(activo.estado)}</td>
-                    <td className="font-mono text-sm">{formatDate(activo.fechaAdquisicion)}</td>
-                    <td className="font-mono text-sm text-accent">
-                      {formatCurrency(activo.valorInicial || 0)}
+                    <td className="max-w-[300px] py-3">
+                      <div className="font-bold uppercase truncate text-sm leading-tight text-slate-900 dark:text-slate-100">{activo.nombre}</div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-tight flex items-center gap-2">
+                        <span className="font-semibold px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded">{activo.marca || '-'}</span>
+                        <span className="opacity-50">•</span>
+                        <span>{activo.modelo || '-'}</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 dark:text-slate-500 font-mono mt-1 pt-1 border-t border-border/30">
+                        N/S: {activo.numeroSerie || '-'}
+                      </div>
                     </td>
-                    <td className="text-sm">{activo.responsable}</td>
+                    <td className="text-slate-500 dark:text-slate-400 text-sm uppercase font-semibold">{activo.categoria}</td>
+                    <td className="text-sm font-bold text-slate-700 dark:text-slate-300">{activo.ubicacion}</td>
+                    <td>{getStatusBadge(activo.estado)}</td>
+                    <td className="font-mono text-sm text-right pr-6">
+                      <span className="text-primary font-black text-lg">
+                        {formatCurrency(Number(activo.valorInicial) || 0)}
+                      </span>
+                    </td>
                     <td>
-                      <div className="flex gap-2">
-                        {/* Botón Imprimir - disponible para todos */}
+                      <div className="flex gap-2 justify-end px-2">
+                        {/* Botón Imprimir Etiqueta - Neutro */}
                         <Button
-                          size="sm"
-                          variant="ghost"
+                          size="icon"
+                          variant="outline"
+                          className="h-9 w-9 text-slate-400 border-slate-200 hover:bg-slate-50 hover:text-slate-600 transition-all duration-300"
                           onClick={() => handlePrintLabel(activo)}
-                          title="Imprimir rótulo"
+                          title="Imprimir rótulo de Inventario"
+                        >
+                          <Search className="w-4 h-4" />
+                        </Button>
+                        {/* Botón Cargo de Equipo - Vibrante Naranja */}
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          className="h-9 w-9 text-orange-500 border-orange-500/30 hover:bg-orange-500/10 hover:border-orange-500 hover:text-orange-600 transition-all duration-300 shadow-sm"
+                          onClick={async () => {
+                            const payload = {
+                              activoId: activo.id,
+                              responsable: activo.responsable,
+                              fecha: new Date().toLocaleDateString('es-CL'),
+                              cargo: 'Operario / Responsable de Equipo',
+                              equipo: activo.nombre,
+                              serie: activo.numeroSerie || activo.id,
+                              marca: activo.marca,
+                              modelo: activo.modelo
+                            };
+
+                            await execute(actasApi.generateCargo(payload), {
+                              successMessage: "✅ Acta de Cargo generada en sistema.",
+                              onSuccess: () => triggerPrint(payload)
+                            });
+                          }}
+                          title="Generar e Imprimir Acta de Cargo"
                         >
                           <Printer className="w-4 h-4" />
                         </Button>
@@ -372,23 +359,26 @@ export function ActivosModule() {
                         {canEdit && (
                           <>
                             <Button
-                              size="sm"
-                              variant="ghost"
+                              size="icon"
+                              variant="outline"
+                              className="h-9 w-9 text-blue-400 border-blue-400/30 hover:bg-blue-400/10 hover:border-blue-400 hover:text-blue-300 transition-all duration-300 shadow-sm"
                               onClick={() => {
                                 setEditingActivo(activo);
                                 setIsFormOpen(true);
                               }}
+                              title="Editar Activo"
                             >
                               <Edit className="w-4 h-4" />
                             </Button>
                             <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-destructive hover:text-destructive"
+                              size="icon"
+                              variant="outline"
+                              className="h-9 w-9 text-rose-500 border-rose-500/30 hover:bg-rose-500/10 hover:border-rose-500 hover:text-rose-600 transition-all duration-300 shadow-sm"
                               onClick={() => {
                                 setActivoToDelete(activo);
                                 setIsDeleteDialogOpen(true);
                               }}
+                              title="Eliminar Activo (Baja)"
                             >
                               <Trash2 className="w-4 h-4" />
                             </Button>
@@ -430,55 +420,32 @@ export function ActivosModule() {
           setIsDeleteDialogOpen(false);
           setActivoToDelete(null);
         }}
-        onConfirm={async (justification, checkboxesState) => {
+        onConfirm={async (justification) => {
           if (!activoToDelete) return;
-          const deleteFromBodega = checkboxesState?.deleteFromWarehouse ?? false;
 
-          // Flow for EVERYONE: Send a deletion request
-          await execute(
-            auditoriaApi.create({
-              modulo: 'Activos',
-              accion: 'solicitud_eliminacion',
-              mensaje: JSON.stringify({
-                entity: 'activos',
-                id: activoToDelete.id,
-                name: activoToDelete.nombre,
-                deleteFromWarehouse: deleteFromBodega,
-                justification: justification
-              }),
-              tipo: 'warning',
-              usuario: user?.email || 'Usuario',
-              justificacion: justification
-            }),
-            {
-              successMessage: "Solicitud de eliminación enviada para aprobación del administrador.",
-              onSuccess: () => {
-                setIsDeleteDialogOpen(false);
-                setActivoToDelete(null);
-                queryClient.invalidateQueries({ queryKey: ['activity-alerts'] });
-              }
-            }
-          );
+          await deleteMutation.mutateAsync({
+            id: activoToDelete.id,
+            justification
+          });
         }}
         isLoading={deleteMutation.isPending || isActionLoading}
         title="¿Eliminar Activo?"
-        description="Esta acción eliminará el activo del sistema. Se requiere una justificación."
+        description="Esta acción eliminará el activo del sistema y su registro en bodega. Se requiere una justificación legal para la baja."
         itemName={activoToDelete ? `${activoToDelete.nombre} (${activoToDelete.id})` : undefined}
         isAdmin={isAdmin}
         isCritical={true}
-        checkboxes={[
-          {
-            id: "deleteFromWarehouse",
-            label: "Eliminar también de bodega (descontar del inventario)",
-            defaultValue: false
-          },
-        ]}
       />
 
       {/* Rótulo para Imprimir (oculto) */}
       <div className="hidden">
         {printingActivo && (
           <AssetLabel ref={labelRef} activo={printingActivo} showBoth={true} />
+        )}
+      </div>
+      {/* Componente de Impresión (Fuera del visor normal pero no hidden para react-to-print) */}
+      <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
+        {printingData && (
+          <PrintableCargoForm ref={printRef} data={printingData} />
         )}
       </div>
     </div>

@@ -1,11 +1,12 @@
 /**
  * CRUD OPERATIONS: MOVIMIENTOS_ALMACEN
- * Refactored to use fully dynamic column mapping.
+ * Refactored to use corrected column mapping (L=11, M=12).
  */
 
 function handleMovimientosGet(action, id, almacenId) {
   switch (action.toLowerCase()) {
     case 'getall': return almacenId ? getMovimientosByAlmacen(almacenId) : getAllMovimientos();
+    case 'getbyid': return getMovimientoById(id);
     default: return createErrorResponse('Acción no válida', 400);
   }
 }
@@ -18,47 +19,24 @@ function handleMovimientosPost(action, id, data) {
   }
 }
 
-/**
- * Helper to get column mapping for MOVIMIENTOS_ALMACEN
- */
-function getMovimientosColMap(sheet) {
-  return findColumnIndices(sheet, {
-    ID: ['ID', 'ID_MOVIMIENTO', 'CODIGO'],
-    PROD_ID: ['ID_PRODUCTO', 'PRODUCTO_ID'],
-    TIPO: ['TIPO', 'TIPO_MOVIMIENTO'],
-    ALM_ORIGEN: ['ID_ALMACEN_ORIGEN', 'ALMACEN_ORIGEN', 'ORIGEN'],
-    ALM_DESTINO: ['ID_ALMACEN_DESTINO', 'ALMACEN_DESTINO', 'DESTINO'],
-    CANTIDAD: ['CANTIDAD', 'CANT'],
-    FECHA: ['FECHA', 'FECHA_MOVIMIENTO'],
-    RESPONSABLE: ['RESPONSABLE'],
-    GUIA: ['GUIA_REFERENCIA', 'GUIA', 'REFERENCIA'],
-    MOTIVO: ['MOTIVO'],
-    PROVEEDOR: ['PROVEEDOR_TRANSPORTE', 'TRANSPORTE'],
-    OBSERVACIONES: ['OBSERVACIONES'],
-    FECHA_DEVOLUCION: ['FECHA_DEVOLUCION', 'DEVOLUCION_ESTIMADA', 'RETORNO_ESTIMADO', 'FECHA_LIMITE']
-  });
-}
-
 function getAllMovimientos() {
     try {
         const sheet = getSheet(SHEET_NAMES.MOVIMIENTOS_ALMACEN);
         const data = sheet.getDataRange().getValues();
         if (data.length <= 1) return createResponse(true, []);
         
-        const colMap = getMovimientosColMap(sheet);
+        const col = COLUMNS.MOVIMIENTOS_ALMACEN;
         const productMap = fetchProductNamesMap();
 
         const movimientos = [];
         for (let i = 1; i < data.length; i++) {
             const row = data[i];
-            const idIdx = colMap.ID !== -1 ? colMap.ID : COLUMNS.MOVIMIENTOS_ALMACEN.ID;
-            if (!row[idIdx]) continue;
-            
-            movimientos.push(mapRowToMovimiento(row, colMap, productMap));
+            if (!row[col.ID]) continue;
+            movimientos.push(mapRowToMovimiento(row, col, productMap));
         }
         return createResponse(true, movimientos);
     } catch (error) {
-        return createResponse(false, null, error.toString());
+        return createErrorResponse(error.toString());
     }
 }
 
@@ -68,244 +46,192 @@ function getMovimientosByAlmacen(almacenId) {
         const data = sheet.getDataRange().getValues();
         if (data.length <= 1) return createResponse(true, []);
         
-        const colMap = getMovimientosColMap(sheet);
+        const col = COLUMNS.MOVIMIENTOS_ALMACEN;
         const productMap = fetchProductNamesMap();
+        const targetId = String(almacenId).trim();
 
         const movimientos = [];
         for (let i = 1; i < data.length; i++) {
             const row = data[i];
-            const idIdx = colMap.ID !== -1 ? colMap.ID : COLUMNS.MOVIMIENTOS_ALMACEN.ID;
-            const orgIdx = colMap.ALM_ORIGEN !== -1 ? colMap.ALM_ORIGEN : COLUMNS.MOVIMIENTOS_ALMACEN.ALMACEN_ORIGEN;
-            const destIdx = colMap.ALM_DESTINO !== -1 ? colMap.ALM_DESTINO : COLUMNS.MOVIMIENTOS_ALMACEN.ALMACEN_DESTINO;
+            if (!row[col.ID]) continue;
             
-            if (!row[idIdx]) continue;
-            
-            const isOrigin = String(row[orgIdx]) === String(almacenId);
-            const isDestination = String(row[destIdx]) === String(almacenId);
+            const isOrigin = String(row[col.ALMACEN_ORIGEN]).trim() === targetId;
+            const isDestination = String(row[col.ALMACEN_DESTINO]).trim() === targetId;
             
             if (isOrigin || isDestination) {
-                movimientos.push(mapRowToMovimiento(row, colMap, productMap));
+                movimientos.push(mapRowToMovimiento(row, col, productMap));
             }
         }
         return createResponse(true, movimientos);
     } catch (error) {
-        return createResponse(false, null, error.toString());
+        return createErrorResponse(error.toString());
     }
 }
 
-function fetchProductNamesMap() {
-    const prodSheet = getSheet(SHEET_NAMES.PRODUCTOS_ALMACEN);
-    const prodData = prodSheet.getDataRange().getValues();
-    const prodColMap = findColumnIndices(prodSheet, { 
-      ID: ['ID', 'ID_PRODUCTO'], 
-      NOMBRE: ['NOMBRE', 'NOMBRE_PRODUCTO'] 
-    });
-    
-    const idIdx = prodColMap.ID !== -1 ? prodColMap.ID : COLUMNS.PRODUCTOS_ALMACEN.ID;
-    const nmIdx = prodColMap.NOMBRE !== -1 ? prodColMap.NOMBRE : COLUMNS.PRODUCTOS_ALMACEN.NOMBRE;
-    
-    const map = {};
-    for (let j = 1; j < prodData.length; j++) {
-        const pId = String(prodData[j][idIdx] || '').trim();
-        if (pId) map[pId] = prodData[j][nmIdx];
+function getMovimientoById(id) {
+    try {
+        const sheet = getSheet(SHEET_NAMES.MOVIMIENTOS_ALMACEN);
+        const data = sheet.getDataRange().getValues();
+        const col = COLUMNS.MOVIMIENTOS_ALMACEN;
+        const targetId = String(id).trim();
+        
+        const row = data.find(r => String(r[col.ID]).trim() === targetId);
+        if (!row) return createErrorResponse("Movimiento no encontrado", 404);
+        
+        const productMap = fetchProductNamesMap();
+        return createResponse(true, mapRowToMovimiento(row, col, productMap));
+    } catch (error) {
+        return createErrorResponse(error.toString());
     }
-    return map;
 }
 
-function fetchAlmacenNamesMap() {
-    const sheet = getSheet(SHEET_NAMES.ALMACENES);
-    const data = sheet.getDataRange().getValues();
-    const colMap = findColumnIndices(sheet, { 
-      ID: ['ID', 'ID_ALMACEN'], 
-      NOMBRE: ['NOMBRE'] 
-    });
-    
-    const idIdx = colMap.ID !== -1 ? colMap.ID : 0;
-    const nmIdx = colMap.NOMBRE !== -1 ? colMap.NOMBRE : 1;
-    
-    const map = {};
-    for (let j = 1; j < data.length; j++) {
-        const id = String(data[j][idIdx] || '').trim();
-        if (id) map[id] = data[j][nmIdx];
-    }
-    return map;
-}
-
-function mapRowToMovimiento(row, colMap, productMap) {
-    const getVal = (key, fallbackIdx) => {
-        const idx = colMap[key] !== -1 ? colMap[key] : fallbackIdx;
-        return row[idx];
-    };
-
-    const prodId = String(getVal('PROD_ID', COLUMNS.MOVIMIENTOS_ALMACEN.PRODUCTO_ID) || '').trim();
-
+function mapRowToMovimiento(row, col, productMap) {
+    const prodId = String(row[col.PRODUCTO_ID] || '').trim();
     return {
-        id: getVal('ID', COLUMNS.MOVIMIENTOS_ALMACEN.ID),
+        id: row[col.ID],
         productoId: prodId,
         productoNombre: productMap[prodId] || 'Producto desconocido',
-        tipo: getVal('TIPO', COLUMNS.MOVIMIENTOS_ALMACEN.TIPO),
-        almacenOrigen: getVal('ALM_ORIGEN', COLUMNS.MOVIMIENTOS_ALMACEN.ALMACEN_ORIGEN),
-        almacenDestino: getVal('ALM_DESTINO', COLUMNS.MOVIMIENTOS_ALMACEN.ALMACEN_DESTINO),
-        cantidad: getVal('CANTIDAD', COLUMNS.MOVIMIENTOS_ALMACEN.CANTIDAD),
-        fecha: getVal('FECHA', COLUMNS.MOVIMIENTOS_ALMACEN.FECHA),
-        responsable: getVal('RESPONSABLE', COLUMNS.MOVIMIENTOS_ALMACEN.RESPONSABLE),
-        guiaReferencia: getVal('GUIA', COLUMNS.MOVIMIENTOS_ALMACEN.GUIA_REFERENCIA),
-        motivo: getVal('MOTIVO', COLUMNS.MOVIMIENTOS_ALMACEN.MOTIVO),
-        proveedorTransporte: getVal('PROVEEDOR', COLUMNS.MOVIMIENTOS_ALMACEN.PROVEEDOR_TRANSPORTE),
-        observaciones: getVal('OBSERVACIONES', COLUMNS.MOVIMIENTOS_ALMACEN.OBSERVACIONES),
-        fechaDevolucion: getVal('FECHA_DEVOLUCION', 12)
+        tipo: row[col.TIPO],
+        almacenOrigen: row[col.ALMACEN_ORIGEN],
+        almacenDestino: row[col.ALMACEN_DESTINO],
+        cantidad: row[col.CANTIDAD],
+        fecha: formatDate(row[col.FECHA]),
+        responsable: row[col.RESPONSABLE],
+        guiaReferencia: row[col.GUIA_REFERENCIA],
+        motivo: row[col.MOTIVO],
+        proveedorTransporte: row[col.PROVEEDOR_TRANSPORTE],
+        observaciones: row[col.OBSERVACIONES],
+        fechaDevolucion: row[col.FECHA_DEVOLUCION] ? formatDate(row[col.FECHA_DEVOLUCION]) : ''
     };
 }
 
 function createMovimiento(data) {
     try {
-        const sheet = getSheet(SHEET_NAMES.MOVIMIENTOS_ALMACEN);
-        const prodSheet = getSheet(SHEET_NAMES.PRODUCTOS_ALMACEN);
-        
-        const colMapMov = getMovimientosColMap(sheet);
-        const colMapProd = findColumnIndices(prodSheet, {
-          ID: ['ID', 'ID_PRODUCTO'],
-          ALMACEN_ID: ['ALMACEN_ID', 'ID_ALMACEN'],
-          CANTIDAD: ['CANTIDAD', 'STOCK'],
-          EN_USO: ['EN_USO', 'CANTIDAD_EN_USO'],
-          RETORNABLE: ['RETORNABLE', 'ES_RETORNABLE'],
-          ACTIVO: ['ES_ACTIVO', 'ACTIVO']
-        });
+        const sheetM = getSheet(SHEET_NAMES.MOVIMIENTOS_ALMACEN);
+        const sheetP = getSheet(SHEET_NAMES.PRODUCTOS_ALMACEN);
+        const colM = COLUMNS.MOVIMIENTOS_ALMACEN;
+        const colP = COLUMNS.PRODUCTOS_ALMACEN;
 
-        const idIdx_P = colMapProd.ID !== -1 ? colMapProd.ID : COLUMNS.PRODUCTOS_ALMACEN.ID;
-        const almIdx_P = colMapProd.ALMACEN_ID !== -1 ? colMapProd.ALMACEN_ID : COLUMNS.PRODUCTOS_ALMACEN.ALMACEN_ID;
-        const cantIdx_P = colMapProd.CANTIDAD !== -1 ? colMapProd.CANTIDAD : COLUMNS.PRODUCTOS_ALMACEN.CANTIDAD;
-        const usoIdx_P = colMapProd.EN_USO !== -1 ? colMapProd.EN_USO : COLUMNS.PRODUCTOS_ALMACEN.CANTIDAD_EN_USO;
-        const retIdx_P = colMapProd.RETORNABLE !== -1 ? colMapProd.RETORNABLE : COLUMNS.PRODUCTOS_ALMACEN.ES_RETORNABLE;
-
-        const prodData = prodSheet.getDataRange().getValues();
-        
-        // Idempotency check 
-        const idIdx_M = colMapMov.ID !== -1 ? colMapMov.ID : COLUMNS.MOVIMIENTOS_ALMACEN.ID;
-        const duplicateResponse = checkIdempotency(sheet, data.clientRequestId, idIdx_M);
-        if (duplicateResponse) return duplicateResponse;
-
-        const cantidad = Number(data.cantidad);
-        if (isNaN(cantidad) || cantidad <= 0) throw new Error("Cantidad inválida");
-
+        const prodData = sheetP.getDataRange().getValues();
         const tipo = String(data.tipo).toLowerCase();
-        const targetProdId = String(data.productoId).trim();
-        const targetAlmId = String(data.almacenOrigen || data.almacenId).trim();
-        const targetAlmDest = String(data.almacenDestino).trim();
+        const cantidad = Number(data.cantidad) || 0;
+        const tProdId = String(data.productoId).trim();
+        const tAlmOrg = String(data.almacenOrigen || data.almacenId || '').trim();
+        const tAlmDst = String(data.almacenDestino || '').trim();
 
-        let sourceRow = -1;
-        let destRow = -1;
+        if (cantidad <= 0) throw new Error("Cantidad inválida");
 
+        let sRow = -1, dRow = -1;
+
+        // Localizar filas
         for (let i = 1; i < prodData.length; i++) {
-            const rId = String(prodData[i][idIdx_P]).trim();
-            const rAlm = String(prodData[i][almIdx_P]).trim();
-            if (rId === targetProdId) {
-                if (rAlm === targetAlmId) sourceRow = i + 1;
-                if (tipo === 'traslado' && rAlm === targetAlmDest) destRow = i + 1;
+            if (String(prodData[i][colP.ID]).trim() === tProdId) {
+                if (String(prodData[i][colP.ALMACEN_ID]).trim() === tAlmOrg) sRow = i + 1;
+                if (String(prodData[i][colP.ALMACEN_ID]).trim() === tAlmDst) dRow = i + 1;
             }
         }
 
-        if (sourceRow === -1 && tipo !== 'entrada') throw new Error("Producto no encontrado en almacén de origen");
-
-        const sRowData = sourceRow !== -1 ? prodData[sourceRow - 1] : null;
-        const sStock = sRowData ? Number(sRowData[cantIdx_P]) || 0 : 0;
-        const sUso = sRowData ? Number(sRowData[usoIdx_P]) || 0 : 0;
-        const isRet = sRowData ? checkBoolean(sRowData[retIdx_P]) : false;
-
-        // Apply Stock Changes
+        // LÓGICA DE ACTUALIZACIÓN DE STOCK
         if (tipo === 'entrada') {
-            // Find existing or error (unless we want to support creating from scratch here)
-            if (sourceRow === -1) throw new Error("Producto no registrado en bodega. Úselo desde la vista de Almacén.");
-            prodSheet.getRange(sourceRow, cantIdx_P + 1).setValue(sStock + cantidad);
-        } else if (tipo === 'salida') {
-            if (sStock < cantidad) throw new Error("Stock insuficiente");
-            prodSheet.getRange(sourceRow, cantIdx_P + 1).setValue(sStock - cantidad);
-            if (isRet) {
-                prodSheet.getRange(sourceRow, usoIdx_P + 1).setValue(sUso + cantidad);
-            }
-        } else if (tipo === 'retorno') {
-            if (!isRet) throw new Error("Este producto no es retornable");
-            if (sUso < cantidad) throw new Error("No hay suficientes unidades 'en uso'");
-            prodSheet.getRange(sourceRow, cantIdx_P + 1).setValue(sStock + cantidad);
-            prodSheet.getRange(sourceRow, usoIdx_P + 1).setValue(sUso - cantidad);
-        } else if (tipo === 'baja') {
-            if (sStock >= cantidad) {
-                prodSheet.getRange(sourceRow, cantIdx_P + 1).setValue(sStock - cantidad);
-            } else if (isRet && (sStock + sUso) >= cantidad) {
-                const diff = cantidad - sStock;
-                prodSheet.getRange(sourceRow, cantIdx_P + 1).setValue(0);
-                prodSheet.getRange(sourceRow, usoIdx_P + 1).setValue(sUso - diff);
-            } else {
-                throw new Error("Existencias insuficientes para baja");
-            }
-        } else if (tipo === 'traslado') {
-            if (sStock < cantidad) throw new Error("Stock insuficiente en origen");
-            prodSheet.getRange(sourceRow, cantIdx_P + 1).setValue(sStock - cantidad);
+            const targetRow = dRow !== -1 ? dRow : sRow;
+            if (targetRow === -1) throw new Error("Producto no encontrado en bodega. Debe crearlo primero.");
+            const sStock = Number(prodData[targetRow-1][colP.CANTIDAD]) || 0;
+            sheetP.getRange(targetRow, colP.CANTIDAD + 1).setValue(sStock + cantidad);
+        } 
+        else if (tipo === 'salida') {
+            if (sRow === -1) throw new Error("Stock insuficiente en la bodega de origen.");
+            const sStock = Number(prodData[sRow-1][colP.CANTIDAD]) || 0;
+            const sUso = Number(prodData[sRow-1][colP.EN_USO]) || 0;
+            if (sStock < cantidad) throw new Error("Stock disponible insuficiente.");
             
-            if (destRow === -1) {
-                // Duplicate row to new warehouse
-                const newRow_P = [...prodData[sourceRow - 1]];
-                newRow_P[almIdx_P] = data.almacenDestino;
-                newRow_P[cantIdx_P] = cantidad;
-                newRow_P[usoIdx_P] = 0;
-                // Update Entry Date
-                const dateIdx_P = findColumnIndices(prodSheet, { DATE: ['FECHA_INGRESO'] }).DATE;
-                if (dateIdx_P !== -1) newRow_P[dateIdx_P] = formatDate(new Date());
-                prodSheet.appendRow(newRow_P);
+            sheetP.getRange(sRow, colP.CANTIDAD + 1).setValue(sStock - cantidad);
+            
+            const isTracked = checkBoolean(prodData[sRow-1][colP.ES_RETORNABLE]) || checkBoolean(prodData[sRow-1][colP.ES_ACTIVO]) || !!data.fechaDevolucion;
+            if (isTracked) sheetP.getRange(sRow, colP.EN_USO + 1).setValue(sUso + cantidad);
+        } 
+        else if (tipo === 'retorno') {
+            if (sRow === -1) throw new Error("Producto no encontrado.");
+            const sStock = Number(prodData[sRow-1][colP.CANTIDAD]) || 0;
+            const sUso = Number(prodData[sRow-1][colP.EN_USO]) || 0;
+            sheetP.getRange(sRow, colP.CANTIDAD + 1).setValue(sStock + cantidad);
+            sheetP.getRange(sRow, colP.EN_USO + 1).setValue(Math.max(0, sUso - cantidad));
+        } 
+        else if (tipo === 'traslado') {
+            if (sRow === -1) throw new Error("Sin existencias en la bodega de origen.");
+            const sStock = Number(prodData[sRow-1][colP.CANTIDAD]) || 0;
+            if (sStock < cantidad) throw new Error("Stock insuficiente en origen.");
+            
+            sheetP.getRange(sRow, colP.CANTIDAD + 1).setValue(sStock - cantidad);
+            
+            if (dRow !== -1) {
+                const dStock = Number(prodData[dRow-1][colP.CANTIDAD]) || 0;
+                sheetP.getRange(dRow, colP.CANTIDAD + 1).setValue(dStock + cantidad);
             } else {
-                const dStock = Number(prodData[destRow - 1][cantIdx_P]) || 0;
-                prodSheet.getRange(destRow, cantIdx_P + 1).setValue(dStock + cantidad);
+                let newRP = [...prodData[sRow-1]];
+                newRP[colP.ALMACEN_ID] = tAlmDst;
+                newRP[colP.CANTIDAD] = cantidad;
+                newRP[colP.EN_USO] = 0;
+                sheetP.appendRow(newRP);
             }
         }
 
-        sheet.appendRow(newRowM);
-        
-        // Detailed Audit Log with Names instead of IDs
-        const productMap = fetchProductNamesMap();
-        const almacenMap = fetchAlmacenNamesMap();
-        
-        const productName = productMap[targetProdId] || targetProdId;
-        const originName = almacenMap[targetAlmId] || targetAlmId;
-        const destName = almacenMap[targetAlmDest] || targetAlmDest;
+        // GUARDAR MOVIMIENTO
+        const movId = generateSequentialId('MOV', SHEET_NAMES.MOVIMIENTOS_ALMACEN, 'ID', 8);
+        const rowM = Array(15).fill('');
+        rowM[colM.ID] = movId;
+        rowM[colM.PRODUCTO_ID] = tProdId;
+        rowM[colM.TIPO] = data.tipo;
+        rowM[colM.ALMACEN_ORIGEN] = tAlmOrg;
+        rowM[colM.ALMACEN_DESTINO] = tAlmDst;
+        rowM[colM.CANTIDAD] = cantidad;
+        rowM[colM.FECHA] = new Date();
+        rowM[colM.RESPONSABLE] = data.responsable;
+        rowM[colM.GUIA_REFERENCIA] = data.guiaReferencia || '';
+        rowM[colM.MOTIVO] = data.motivo || '';
+        rowM[colM.PROVEEDOR_TRANSPORTE] = data.proveedorTransporte || '';
+        rowM[colM.OBSERVACIONES] = data.observaciones || '';
+        rowM[colM.FECHA_DEVOLUCION] = data.fechaDevolucion ? formatDate(data.fechaDevolucion) : '';
 
-        let auditMsg = `Movimiento de ${tipo.toUpperCase()}: ${cantidad} ${data.unidad || ''} de ${productName}`;
-        if (tipo === 'traslado') {
-            auditMsg += ` desde ${originName} hacia ${destName}`;
-        } else if (tipo === 'salida' || tipo === 'retorno') {
-            auditMsg += ` en ${originName}`;
-        } else if (tipo === 'entrada') {
-            auditMsg += ` en ${destName}`;
-        }
+        sheetM.appendRow(rowM);
         
-        registrarAccion('Almacenes', 'movimiento', auditMsg, 'info', data.responsable, data.motivo || data.justificacion);
+        registrarAccion('Almacenes', 'movimiento', `Registro de ${tipo}: ${cantidad} de ${tProdId}`, 'info', data.responsable, data.motivo);
         
-        return createResponse(true, { id: movId, ...data });
-    } catch (error) {
-        return createResponse(false, null, error.toString());
+        return createResponse(true, { id: movId });
+    } catch (e) {
+        return createErrorResponse(e.toString());
     }
 }
 
 function deleteMovimiento(id, data) {
     try {
         const sheet = getSheet(SHEET_NAMES.MOVIMIENTOS_ALMACEN);
-        const colMap = getMovimientosColMap(sheet);
-        const idIdx = colMap.ID !== -1 ? colMap.ID : COLUMNS.MOVIMIENTOS_ALMACEN.ID;
-        const sheetData = sheet.getDataRange().getValues();
+        const dataRows = sheet.getDataRange().getValues();
+        const col = COLUMNS.MOVIMIENTOS_ALMACEN;
         const targetId = String(id).trim();
 
-        for (let i = 1; i < sheetData.length; i++) {
-            if (String(sheetData[i][idIdx]).trim() === targetId) {
-                const prodId = sheetData[i][colMap.PROD_ID !== -1 ? colMap.PROD_ID : COLUMNS.MOVIMIENTOS_ALMACEN.PRODUCTO_ID];
+        for (let i = 1; i < dataRows.length; i++) {
+            if (String(dataRows[i][col.ID]).trim() === targetId) {
                 sheet.deleteRow(i + 1);
-                
-                // Audit Log
-                registrarAccion('Almacenes', 'eliminar_movimiento', `Registro de movimiento ${id} eliminado (Producto: ${prodId})`, 'warning', null, data ? data.justificacion : null);
-                
+                registrarAccion('Almacenes', 'eliminar_movimiento', `Movimiento ${id} eliminado`, 'warning', null, data ? data.justificacion : null);
                 return createResponse(true, { message: "Movimiento eliminado" });
             }
         }
         throw new Error("Movimiento no encontrado");
-    } catch (error) {
-        return createResponse(false, null, error.toString());
+    } catch (e) {
+        return createErrorResponse(e.toString());
     }
+}
+
+function fetchProductNamesMap() {
+    try {
+        const sheet = getSheet(SHEET_NAMES.PRODUCTOS_ALMACEN);
+        const data = sheet.getDataRange().getValues();
+        const col = COLUMNS.PRODUCTOS_ALMACEN;
+        const map = {};
+        for (let i = 1; i < data.length; i++) {
+            const id = String(data[i][col.ID]).trim();
+            if (id) map[id] = data[i][col.NOMBRE];
+        }
+        return map;
+    } catch (e) { return {}; }
 }

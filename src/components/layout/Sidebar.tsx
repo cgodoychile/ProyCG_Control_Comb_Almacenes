@@ -41,6 +41,7 @@ const menuItems = [
   { id: 'almacenes', label: 'Almacenes', icon: Warehouse },
   { id: 'personas', label: 'Personas', icon: Users },
   { id: 'reportes', label: 'Reportes', icon: FileText },
+  { id: 'actas', label: 'Actas de Cargo', icon: FileText },
   { id: 'auditoria', label: 'Auditoría', icon: Shield, adminOnly: true },
   { id: 'usuarios', label: 'Usuarios', icon: User, adminOnly: true },
 ];

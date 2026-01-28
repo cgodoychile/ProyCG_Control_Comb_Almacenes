@@ -313,31 +313,7 @@ export function PersonasModule() {
                 }}
                 onConfirm={async (justification) => {
                     if (!personaToDelete) return;
-
-                    // Flow for EVERYONE: Send a deletion request
-                    await execute(
-                        auditoriaApi.create({
-                            modulo: 'Personas',
-                            accion: 'solicitud_eliminacion',
-                            mensaje: JSON.stringify({
-                                entity: 'personas',
-                                id: personaToDelete.id,
-                                name: personaToDelete.nombreCompleto,
-                                justification: justification
-                            }),
-                            tipo: 'warning',
-                            usuario: user?.email || 'Usuario',
-                            justificacion: justification
-                        }),
-                        {
-                            successMessage: "Solicitud de eliminación enviada para aprobación del administrador.",
-                            onSuccess: () => {
-                                setIsDeleteDialogOpen(false);
-                                setPersonaToDelete(null);
-                                queryClient.invalidateQueries({ queryKey: ['activity-alerts'] });
-                            }
-                        }
-                    );
+                    await handleDelete(personaToDelete.id, justification);
                 }}
                 isLoading={isActionLoading}
                 title="¿Eliminar Persona?"

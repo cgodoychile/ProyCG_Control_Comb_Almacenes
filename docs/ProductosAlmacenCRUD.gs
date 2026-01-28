@@ -7,6 +7,7 @@ function handleProductosGet(action, id, almacenId) {
   switch (action.toLowerCase()) {
     case 'getall': return almacenId ? getAllProductosByAlmacen(almacenId) : getAllProductos();
     case 'getbyid': return getProductoById(id);
+    case 'sync': return syncWarehouseData();
     default: return createErrorResponse('Acción no válida', 400);
   }
 }
@@ -52,13 +53,21 @@ function getAllProductosByAlmacen(almacenId) {
         const colMap = getProductosColMap(sheet);
 
         const productos = [];
+        const almName = getAlmacenName(almacenId);
+
         for (let i = 1; i < data.length; i++) {
             const row = data[i];
             const almIdx = colMap.ALMACEN_ID !== -1 ? colMap.ALMACEN_ID : COLUMNS.PRODUCTOS_ALMACEN.ALMACEN_ID;
             const idIdx = colMap.ID !== -1 ? colMap.ID : COLUMNS.PRODUCTOS_ALMACEN.ID;
             
             if (!row[idIdx]) continue;
-            if (almacenId && String(row[almIdx]).trim() !== String(almacenId).trim()) continue;
+            
+            const pAlmId = String(row[almIdx]).trim();
+            if (almacenId) {
+               const targetId = String(almacenId).trim();
+               // Si no coincide con el ID ni con el Nombre de la bodega, saltar
+               if (pAlmId !== targetId && pAlmId !== almName) continue;
+            }
             
             productos.push(mapRowToProducto(row, colMap));
         }
@@ -143,12 +152,17 @@ function createProducto(data) {
         const duplicateResponse = checkIdempotency(sheet, data.clientRequestId, idIdx);
         if (duplicateResponse) return duplicateResponse;
 
-        if (data.clientRequestId) {
-            data.id = data.clientRequestId;
-        } else if (!data.id && data.categoria) {
-            data.id = generateProductCode(data.categoria);
-        } else if (!data.id) {
-            data.id = 'PRD-' + new Date().getTime();
+        // Use provided ID (from Asset) or generate a new one
+        if (!data.id) {
+            data.id = generateAutoId('PRD');
+        }
+        
+        // Final duplicate check with generated ID
+        for (let j = 1; j < sheet.getLastRow(); j++) {
+            const dataValues = sheet.getDataRange().getValues();
+            if (String(dataValues[j][idIdx]).trim() === String(data.id).trim()) {
+                 return createResponse(true, { ...data, _isDuplicate: true }, "Este ID de producto ya existe");
+            }
         }
 
         // Determinar longitud necesaria (al menos el indice más alto en colMap + 1)
@@ -250,20 +264,30 @@ function deleteProducto(id, data) {
         const sheet = getSheet(SHEET_NAMES.PRODUCTOS_ALMACEN);
         const colMap = getProductosColMap(sheet);
         const idIdx = colMap.ID !== -1 ? colMap.ID : COLUMNS.PRODUCTOS_ALMACEN.ID;
+        const nombreIdx = colMap.NOMBRE !== -1 ? colMap.NOMBRE : COLUMNS.PRODUCTOS_ALMACEN.NOMBRE;
         const sheetData = sheet.getDataRange().getValues();
         const targetId = String(id).trim();
 
-        for (let i = 1; i < sheetData.length; i++) {
+        let deletedCount = 0;
+        let lastNombre = '';
+
+        // Iterar hacia atrás para eliminar todas las instancias del producto (en diferentes bodegas)
+        for (let i = sheetData.length - 1; i >= 1; i--) {
             if (String(sheetData[i][idIdx]).trim() === targetId) {
-                const nombreIdx = colMap.NOMBRE !== -1 ? colMap.NOMBRE : COLUMNS.PRODUCTOS_ALMACEN.NOMBRE;
-                const nombre = sheetData[i][nombreIdx];
+                lastNombre = sheetData[i][nombreIdx];
                 sheet.deleteRow(i + 1);
-                
-                registrarAccion('Almacenes', 'eliminar', `Producto eliminado: ${nombre} (${id})`, 'warning', null, data ? data.justificacion : null);
-                createAlerta('warning', `Producto eliminado: ${nombre}`, 'Almacenes', 'eliminar');
-                return createResponse(true, { message: "Producto eliminado" });
+                deletedCount++;
             }
         }
+
+        if (deletedCount > 0) {
+            SpreadsheetApp.flush();
+            syncWarehouseData(); // Auto-cleanup assignments for deleted products
+            registrarAccion('Almacenes', 'eliminar', `Producto eliminado: ${lastNombre} (ID: ${id}, Instancias: ${deletedCount})`, 'warning', null, data ? data.justificacion : null);
+            createAlerta('warning', `Producto eliminado: ${lastNombre}`, 'Almacenes', 'eliminar');
+            return createResponse(true, { message: `Producto eliminado (${deletedCount} instancias)` });
+        }
+        
         throw new Error("Producto no encontrado (ID: " + id + ")");
     } catch (error) {
         return createResponse(false, null, error.toString());

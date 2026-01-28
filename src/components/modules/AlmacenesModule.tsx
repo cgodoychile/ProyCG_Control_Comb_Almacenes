@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { almacenesApi, productosAlmacenApi, movimientosAlmacenApi, activosApi, auditoriaApi } from '@/lib/apiService';
+import { almacenesApi, productosAlmacenApi, movimientosAlmacenApi, activosApi, auditoriaApi, actasApi } from '@/lib/apiService';
 import { AlmacenForm } from '@/components/forms/AlmacenForm';
 import { ProductoForm } from '@/components/forms/ProductoForm';
 import { MovimientoForm } from '@/components/forms/MovimientoForm';
@@ -37,6 +37,7 @@ import {
 } from 'recharts';
 import { useReactToPrint } from 'react-to-print';
 import { ProductLabel } from '@/components/assets/ProductLabel';
+import { PrintableCargoForm } from '@/components/shared/PrintableCargoForm';
 import { BarcodeScanner } from '@/components/shared/BarcodeScanner';
 import { useApi } from '@/hooks/useApi';
 
@@ -76,6 +77,21 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
     const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
     const [itemToDelete, setItemToDelete] = useState<{ id: string, type: 'almacen' | 'producto' | 'movimiento', name?: string } | null>(null);
     const labelRef = useRef<HTMLDivElement>(null);
+    const printRef = useRef<HTMLDivElement>(null);
+    const [printingData, setPrintingData] = useState<any>(null);
+
+    const handlePrintActa = useReactToPrint({
+        contentRef: printRef,
+        documentTitle: `Acta_Cargo_${printingData?.responsable || 'Insumo'}`,
+        onAfterPrint: () => setPrintingData(null)
+    });
+
+    const triggerPrint = (data: any) => {
+        setPrintingData(data);
+        setTimeout(() => {
+            if (handlePrintActa) handlePrintActa();
+        }, 300);
+    };
 
     useEffect(() => {
         setSearchTerm(globalSearch);
@@ -192,15 +208,16 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
             if (data.esActivo) {
                 const warehouseName = almacenes.find((a: any) => a.id === data.almacenId)?.nombre || 'Almacén';
                 const assetData: any = {
-                    id: `ACT-${Date.now()}`,
                     nombre: data.nombre,
                     categoria: data.categoria,
                     ubicacion: warehouseName,
                     estado: 'operativo',
                     fechaAdquisicion: getLocalDate(),
                     valorInicial: data.valorUnitario,
-                    responsable: user?.name || 'Sistema'
+                    responsable: user?.name || 'Sistema',
+                    descripcion: data.descripcion || `Producto vinculado en ${warehouseName}`
                 };
+
                 await activosApi.create(assetData);
             }
             return response;
@@ -239,16 +256,13 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
 
     const deleteProductoMutation = useMutation({
         mutationFn: async ({ id, justification }: { id: string, justification: string }) => {
-            // Find the product to check if it's an activo
             const producto = productos.find((p: any) => p.id === id);
 
             const response = await productosAlmacenApi.delete(id, { justificacion: justification });
             if (!response.success) throw new Error(response.message || "Error al eliminar");
 
-            // If the product was marked as an activo, delete it from Activos module too
             if (producto?.esActivo) {
                 try {
-                    // Find the activo by name (since we created it with the product name)
                     const activosResponse = await activosApi.getAll();
                     if (activosResponse.success) {
                         const activo = activosResponse.data.find((a: Activo) =>
@@ -262,7 +276,6 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                     }
                 } catch (error) {
                     console.error('Error eliminando activo:', error);
-                    // Don't throw - product deletion was successful
                 }
             }
 
@@ -271,7 +284,7 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['productos'] });
             queryClient.invalidateQueries({ queryKey: ['almacenes'] });
-            queryClient.invalidateQueries({ queryKey: ['activos'] }); // Invalidate activos too
+            queryClient.invalidateQueries({ queryKey: ['activos'] });
             toast({ title: "✅ Producto eliminado", description: "El producto y su activo asociado han sido eliminados." });
             setIsDeleteConfirmOpen(false);
             setItemToDelete(null);
@@ -316,7 +329,7 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
     const handleOpenMovimiento = (tipo: 'entrada' | 'salida' | 'traslado' | 'retorno' | 'baja', productoId: string | null = null) => {
         setMovimientoTipo(tipo);
         setSelectedProducto(productoId);
-        if (!movimientoInitialData) setMovimientoInitialData(null); // Clear if manual open (unless set by onReturn wrapper)
+        if (!movimientoInitialData) setMovimientoInitialData(null);
         setIsMovimientoFormOpen(true);
     };
 
@@ -339,30 +352,35 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
     const handleConfirmDelete = async (justification: string) => {
         if (!itemToDelete) return;
 
-        // Flow for EVERYONE: Send a deletion request
-        await execute(
-            auditoriaApi.create({
-                modulo: 'Almacenes',
-                accion: 'solicitud_eliminacion',
-                mensaje: JSON.stringify({
-                    entity: itemToDelete.type === 'almacen' ? 'almacenes' : 'productos',
-                    id: itemToDelete.id,
-                    name: itemToDelete.name || itemToDelete.id,
-                    justification: justification
+        if (itemToDelete.type === 'producto') {
+            deleteProductoMutation.mutate({ id: itemToDelete.id, justification });
+        } else if (itemToDelete.type === 'almacen') {
+            deleteAlmacenMutation.mutate({ id: itemToDelete.id, justification });
+        } else {
+            await execute(
+                auditoriaApi.create({
+                    modulo: 'Almacenes',
+                    accion: 'solicitud_eliminacion',
+                    mensaje: JSON.stringify({
+                        entity: itemToDelete.type,
+                        id: itemToDelete.id,
+                        name: itemToDelete.name || itemToDelete.id,
+                        justification: justification
+                    }),
+                    tipo: 'warning',
+                    usuario: user?.email || 'Usuario',
+                    justificacion: justification
                 }),
-                tipo: 'warning',
-                usuario: user?.email || 'Usuario',
-                justificacion: justification
-            }),
-            {
-                successMessage: "Solicitud de eliminación enviada para aprobación del administrador.",
-                onSuccess: () => {
-                    setIsDeleteConfirmOpen(false);
-                    setItemToDelete(null);
-                    queryClient.invalidateQueries({ queryKey: ['activity-alerts'] });
+                {
+                    successMessage: "Solicitud de eliminación enviada para aprobación.",
+                    onSuccess: () => {
+                        setIsDeleteConfirmOpen(false);
+                        setItemToDelete(null);
+                        queryClient.invalidateQueries({ queryKey: ['activity-alerts'] });
+                    }
                 }
-            }
-        );
+            );
+        }
     };
 
     const formatCurrency = (amount: number) => {
@@ -375,37 +393,26 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
         return { label: 'Normal', color: 'text-success' };
     };
 
-    // Prepare chart data - Calculate valorInventario if not provided by backend
     const chartDataAlmacen = almacenes.map((a: any) => {
-        // If backend provides valorInventario, use it
         if (a.valorInventario && a.valorInventario > 0) {
             return {
                 name: a.nombre,
                 value: a.valorInventario
             };
         }
-
-        // Otherwise calculate from products (fallback)
-        // Note: This requires fetching all products, which we only have for selected warehouse
-        // For now, we'll use the backend value or 0
         return {
             name: a.nombre,
             value: a.valorInventario || 0
         };
-    }).filter(v => v.name); // Filter only by name to ensure all warehouses appear
+    }).filter(v => v.name);
 
     const categoryGroups: { [key: string]: number } = {};
-    almacenes.forEach((a: any) => {
-        // This is tricky because we need all products for all warehouses to get a true category view
-        // But we only have products for the selected warehouse in the query.
-        // Let's assume we want categories for the selected warehouse if any, or just use the warehouse data
-    });
+    almacenes.forEach((a: any) => { });
 
     const chartDataCategory = Object.keys(categoryGroups).map(name => ({ name, value: categoryGroups[name] }));
 
     return (
         <div className="space-y-6">
-            {/* Header */}
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
                 <div>
                     <h2 className="text-xl font-bold tracking-tight text-foreground">Almacenes e Inventario</h2>
@@ -443,7 +450,6 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                 </div>
             </div>
 
-            {/* Dashboard KPIs */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <KPICard title="Total Almacenes" value={totalAlmacenes.toString()} icon={Warehouse} variant="default" />
                 <KPICard title="Total Productos" value={totalProductos.toString()} icon={Package} variant="default" />
@@ -451,7 +457,6 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                 <KPICard title="Valor Inventario" value={formatCurrency(totalInventoryValue)} icon={TrendingUp} variant="success" subtitle="Valorización total" />
             </div>
 
-            {/* Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <div className="lg:col-span-2 card-fuel rounded-xl border border-border p-4 h-[300px]">
                     <h3 className="text-sm font-bold mb-4 uppercase tracking-wider text-muted-foreground flex items-center gap-2">
@@ -510,7 +515,6 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                 </div>
             </div>
 
-            {/* Warehouses Dashboard */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {almacenes.map((almacen: any) => (
                     <div
@@ -545,6 +549,18 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                                             }}
                                         >
                                             <Edit className="w-3.5 h-3.5" />
+                                        </Button>
+                                        <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setItemToDelete({ id: almacen.id, type: 'almacen', name: almacen.nombre });
+                                                setIsDeleteConfirmOpen(true);
+                                            }}
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
                                         </Button>
                                     </div>
                                 )}
@@ -609,10 +625,8 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                 ))}
             </div>
 
-            {/* Warehouse Detail Section */}
             {selectedWarehouse && (
                 <div className="card-fuel rounded-xl border border-border p-6 animate-fade-in space-y-6">
-                    {/* Detail Header & Action Bar */}
                     <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
                         <div className="flex items-center gap-4">
                             <div className="bg-primary/10 p-2 rounded-lg">
@@ -700,7 +714,6 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                         </div>
                     </div>
 
-                    {/* Content Area */}
                     {viewMode === 'existencias' ? (
                         <div className="relative overflow-x-auto rounded-lg border border-border/50">
                             <table className="w-full text-sm text-left">
@@ -748,7 +761,7 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                                                 <td className="px-6 py-4 text-right">
                                                     <div className="flex gap-1 justify-end">
                                                         <Button
-                                                            variant="ghost"
+                                                            variant="outline"
                                                             size="icon"
                                                             className="h-8 w-8 text-success hover:bg-success/10"
                                                             onClick={() => handleOpenMovimiento('entrada', producto.id)}
@@ -757,7 +770,7 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                                                             <ArrowDownLeft className="w-4 h-4" />
                                                         </Button>
                                                         <Button
-                                                            variant="ghost"
+                                                            variant="outline"
                                                             size="icon"
                                                             className="h-8 w-8 text-warning hover:bg-warning/10"
                                                             onClick={() => handleOpenMovimiento('salida', producto.id)}
@@ -766,7 +779,7 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                                                             <ArrowUpRight className="w-4 h-4" />
                                                         </Button>
                                                         <Button
-                                                            variant="ghost"
+                                                            variant="outline"
                                                             size="icon"
                                                             className="h-8 w-8 text-blue-600 hover:bg-blue-50"
                                                             onClick={(e) => { e.stopPropagation(); handleOpenMovimiento('traslado', producto.id); }}
@@ -774,11 +787,37 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                                                         >
                                                             <Package className="w-4 h-4" />
                                                         </Button>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="icon"
+                                                            className="h-8 w-8 text-orange-500 border-orange-500/30 hover:bg-orange-500/10 hover:border-orange-500 hover:text-orange-600 transition-all duration-300 shadow-sm"
+                                                            onClick={async (e) => {
+                                                                e.stopPropagation();
+                                                                const payload = {
+                                                                    activoId: producto.id,
+                                                                    responsable: producto.responsable || user?.name || 'Responsable',
+                                                                    fecha: new Date().toLocaleDateString('es-CL'),
+                                                                    cargo: 'Responsable de Inventario',
+                                                                    equipo: producto.nombre,
+                                                                    serie: producto.id,
+                                                                    marca: producto.marca,
+                                                                    modelo: producto.modelo
+                                                                };
+
+                                                                await execute(actasApi.generateCargo(payload), {
+                                                                    successMessage: "✅ Hoja de Cargo generada correctamente.",
+                                                                    onSuccess: () => triggerPrint(payload)
+                                                                });
+                                                            }}
+                                                            title="Generar e Imprimir Hoja de Cargo"
+                                                        >
+                                                            <Printer className="w-4 h-4" />
+                                                        </Button>
                                                         {producto.esRetornable && (
                                                             <Button
-                                                                variant="ghost"
+                                                                variant="outline"
                                                                 size="icon"
-                                                                className="h-8 w-8 text-indigo-600 hover:bg-indigo-50"
+                                                                className="h-8 w-8 text-indigo-500 border-indigo-500/30 hover:bg-indigo-500/10"
                                                                 onClick={(e) => { e.stopPropagation(); handleOpenMovimiento('retorno', producto.id); }}
                                                                 title="Retorno a Bodega"
                                                             >
@@ -786,26 +825,26 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                                                             </Button>
                                                         )}
                                                         <Button
-                                                            variant="ghost"
+                                                            variant="outline"
                                                             size="icon"
-                                                            className="h-8 w-8 text-destructive/70 hover:bg-destructive/10"
+                                                            className="h-8 w-8 text-rose-500 border-rose-500/30 hover:bg-rose-500/10"
                                                             onClick={(e) => { e.stopPropagation(); handleOpenMovimiento('baja', producto.id); }}
                                                             title="Dar de Baja"
                                                         >
                                                             <AlertTriangle className="w-4 h-4" />
                                                         </Button>
                                                         <Button
-                                                            variant="ghost"
+                                                            variant="outline"
                                                             size="icon"
-                                                            className="h-8 w-8 text-accent"
+                                                            className="h-8 w-8 text-slate-400 border-slate-200"
                                                             onClick={() => handlePrintLabel(producto)}
-                                                            title="Imprimir rótulo"
+                                                            title="Imprimir rótulo de Inventario"
                                                         >
-                                                            <Printer className="w-4 h-4" />
+                                                            <Search className="w-4 h-4" />
                                                         </Button>
-                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => { setEditingProducto(producto); setIsProductoFormOpen(true); }}><Edit className="w-4 h-4" /></Button>
+                                                        <Button variant="outline" size="icon" className="h-8 w-8 text-blue-400 border-blue-400/30" onClick={() => { setEditingProducto(producto); setIsProductoFormOpen(true); }}><Edit className="w-4 h-4" /></Button>
                                                         <Button
-                                                            variant="ghost"
+                                                            variant="outline"
                                                             size="icon"
                                                             className="h-8 w-8 text-destructive"
                                                             onClick={() => {
@@ -893,7 +932,6 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                 </div>
             )}
 
-            {/* Forms */}
             <ProductTrackingDialog
                 isOpen={!!trackingProducto}
                 onClose={() => setTrackingProducto(null)}
@@ -901,11 +939,16 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                 movimientos={movimientos}
                 isLoading={loadingMovimientos}
                 onReturn={(responsable, cantidad) => {
-                    setMovimientoInitialData({ responsable, cantidad });
-                    setMovimientoTipo('retorno');
-                    setSelectedProducto(trackingProducto.id);
-                    setTrackingProducto(null);
-                    setIsMovimientoFormOpen(true);
+                    if (trackingProducto) {
+                        const productId = trackingProducto.id;
+                        setTrackingProducto(null);
+                        setTimeout(() => {
+                            setMovimientoInitialData({ responsable, cantidad });
+                            setMovimientoTipo('retorno');
+                            setSelectedProducto(productId);
+                            setIsMovimientoFormOpen(true);
+                        }, 100);
+                    }
                 }}
             />
 
@@ -926,7 +969,6 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                 />
             )}
 
-            {/* Product Selection for Entry/Exit/Transfer */}
             {isMovimientoFormOpen && selectedWarehouse && !selectedProducto && (
                 <Dialog open={isMovimientoFormOpen} onOpenChange={setIsMovimientoFormOpen}>
                     <DialogContent className="sm:max-w-[500px]">
@@ -1012,7 +1054,6 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                     initialData={movimientoInitialData}
                 />
             )}
-            {/* Warehouse Selection for Excel */}
             <Dialog open={isWarehouseSelectionOpen} onOpenChange={setIsWarehouseSelectionOpen}>
                 <DialogContent className="sm:max-w-[425px]">
                     <DialogHeader>
@@ -1050,14 +1091,12 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                 onClose={() => setIsGlobalSearchOpen(false)}
             />
 
-            {/* Escáner de Códigos */}
             <BarcodeScanner
                 open={isScannerOpen}
                 onClose={() => setIsScannerOpen(false)}
                 onScan={handleScanCode}
             />
 
-            {/* Deletion Justification Dialog */}
             <ConfirmDeleteWithJustificationDialog
                 open={isDeleteConfirmOpen}
                 onClose={() => {
@@ -1075,6 +1114,13 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                 isCritical={true}
             />
 
+            {/* Componente de Impresión (Fuera del visor normal pero no hidden para react-to-print) */}
+            <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
+                {printingData && (
+                    <PrintableCargoForm ref={printRef} data={printingData} />
+                )}
+            </div>
+
             {/* Rótulo para Imprimir (oculto) */}
             <div className="hidden">
                 {printingProducto && (
@@ -1084,4 +1130,3 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
         </div>
     );
 }
-
