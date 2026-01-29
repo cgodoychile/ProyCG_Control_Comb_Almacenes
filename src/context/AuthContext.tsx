@@ -47,6 +47,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
     }, []);
 
+    // Auto-logout Logic (15 minutes inactivity)
+    useEffect(() => {
+        if (!user) return; // Only track while logged in
+
+        const INACTIVITY_LIMIT = 15 * 60 * 1000; // 15 Minutos
+        let timer: NodeJS.Timeout;
+
+        const logoutInactive = () => {
+            console.warn("Sesión cerrada por inactividad");
+            // Use locally defined logout to avoid closure staleness if necessary, 
+            // but calling state setter is safe.
+            setUser(null);
+            localStorage.removeItem('fuel_user');
+            window.location.reload(); // Force reload to clear any sensitive state
+        };
+
+        const resetTimer = () => {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(logoutInactive, INACTIVITY_LIMIT);
+        };
+
+        const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
+        events.forEach(event => document.addEventListener(event, resetTimer));
+
+        // Initial start
+        resetTimer();
+
+        return () => {
+            if (timer) clearTimeout(timer);
+            events.forEach(event => document.removeEventListener(event, resetTimer));
+        };
+    }, [user]);
+
     const login = async (email: string, pass: string) => {
         try {
             // Backend Call

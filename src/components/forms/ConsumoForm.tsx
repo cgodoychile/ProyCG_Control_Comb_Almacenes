@@ -58,13 +58,21 @@ export function ConsumoForm({
     const vehiculoSeleccionado = watch('vehiculo');
     const estanqueSeleccionado = watch('estanque');
 
-    // Detectar si es camioneta basado en la lista de vehículos
+    // Detectar tipo de vehículo
     const selectedVehicleObj = vehiculos.find(v => v.patente === vehiculoSeleccionado || v.id === vehiculoSeleccionado);
-    const isCamioneta = selectedVehicleObj?.tipo?.toLowerCase().includes('camioneta') ||
-        selectedVehicleObj?.nombre?.toLowerCase().includes('camioneta');
+    const vehicleTypeLower = selectedVehicleObj?.tipo?.toLowerCase() || '';
+    const vehicleNameLower = selectedVehicleObj?.nombre?.toLowerCase() || ''; // Fallback to check name if type is generic
 
-    // Alerta critica: Si consume >= 80L. Si es Camioneta y > 60L también alerta.
-    const showJustificationWarning = litrosUsados >= 80 || (isCamioneta && litrosUsados > 60);
+    const isCamioneta = vehicleTypeLower.includes('camioneta') || vehicleNameLower.includes('camioneta');
+    const isGenerador = vehicleTypeLower.includes('generador') || vehicleNameLower.includes('generador') ||
+        vehicleTypeLower.includes('grupo') || vehicleNameLower.includes('grupo');
+
+    // Alerta critica: 
+    // - > 200L: Alerta critica masiva (Generadores)
+    // - >= 80L: Alerta estándar
+    // - Camioneta > 60L: Alerta específica
+    const isVeryHighConsumption = litrosUsados > 200;
+    const showJustificationWarning = isVeryHighConsumption || litrosUsados >= 80 || (isCamioneta && litrosUsados > 60);
     const isCritical = litrosUsados >= 80;
 
     // Estado para controlar el modo de ingreso manual
@@ -242,17 +250,33 @@ export function ConsumoForm({
                         </Alert>
                     )}
                     {showJustificationWarning && (
-                        <div className="mt-4 p-4 border-2 border-destructive bg-destructive/5 rounded-lg flex flex-col items-center gap-3 animate-pulse">
+                        <div className={`mt-4 p-4 border-2 ${isVeryHighConsumption && !isGenerador ? 'border-destructive bg-destructive/10' : 'border-amber-500 bg-amber-50'} rounded-lg flex flex-col items-center gap-3 animate-pulse`}>
                             <img
-                                src="/camioneta.png"
-                                alt="Alerta Camioneta"
-                                className="w-24 h-auto object-contain drop-shadow-md"
+                                src={isGenerador ? "/generador-icon.png" : "/camioneta.png"}
+                                onError={(e) => e.currentTarget.style.display = 'none'}
+                                alt="Alerta Consumo"
+                                className="w-16 h-auto object-contain drop-shadow-md"
                             />
-                            <Alert variant="destructive" className="border-none bg-transparent p-0">
-                                <AlertCircle className="h-5 w-5" />
+                            <Alert variant={isVeryHighConsumption ? "destructive" : "default"} className="border-none bg-transparent p-0">
+                                <AlertCircle className="h-5 w-5 mx-auto mb-2" />
                                 <AlertDescription className="text-center font-bold">
-                                    ⚠️ CONSUMO CRÍTICO DETECTADO: Mayor a 80L o Camioneta ({'>'}60L).
-                                    <span className="block mt-1 uppercase text-xs">Se requiere justificación obligatoria (mínimo 10 caracteres).</span>
+                                    {isVeryHighConsumption ? (
+                                        <>
+                                            ⚠️ ALTO CONSUMO ({litrosUsados}L) DETECTADO.
+                                            <span className="block mt-1 font-normal text-sm">
+                                                {isGenerador ?
+                                                    "Para Generadores/Grupos, verifique horómetro y estado." :
+                                                    "Consumo inusual para este tipo de vehículo."}
+                                            </span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            ⚠️ CONSUMO ELEVADO DETECTADO.
+                                        </>
+                                    )}
+                                    <span className="block mt-1 uppercase text-xs pt-2 border-t border-black/10">
+                                        Se requiere justificación detallada ({isVeryHighConsumption ? 'Mínimo 15' : 'Mínimo 10'} caracteres).
+                                    </span>
                                 </AlertDescription>
                             </Alert>
                         </div>

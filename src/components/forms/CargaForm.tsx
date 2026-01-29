@@ -50,6 +50,8 @@ export function CargaForm({
             proveedor: 'COPEC',
             responsable: 'Admin', // Added default for responsable
             fechaProgramada: getLocalDate(), // Added default for fechaProgramada
+            precioUnitario: 0,
+            precioTotal: 0,
         },
     });
 
@@ -63,6 +65,8 @@ export function CargaForm({
                 proveedor: 'COPEC',
                 responsable: 'Admin', // Added default for responsable
                 fechaProgramada: getLocalDate(), // Added default for fechaProgramada
+                precioUnitario: 0,
+                precioTotal: 0,
                 ...initialData
             });
         }
@@ -71,6 +75,14 @@ export function CargaForm({
     const estanqueSeleccionado = watch('estanque');
     const litros = watch('litros');
     const tipo = watch('tipo');
+    const precioUnitario = watch('precioUnitario');
+
+    // Auto-calculate Total
+    useEffect(() => {
+        const l = parseFloat(String(litros || 0));
+        const p = parseFloat(String(precioUnitario || 0));
+        setValue('precioTotal', l * p);
+    }, [litros, precioUnitario, setValue]);
 
     const estanque = estanques.find(e => e.nombre === estanqueSeleccionado);
     const capacidadDisponible = estanque
@@ -223,6 +235,32 @@ export function CargaForm({
                             </AlertDescription>
                         </Alert>
                     )}
+                </div>
+
+                {/* Precio Unitario y Total */}
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                        <Label htmlFor="precioUnitario">Precio por Litro ($)</Label>
+                        <Input
+                            id="precioUnitario"
+                            type="number"
+                            step="0.1"
+                            {...register('precioUnitario', { valueAsNumber: true })}
+                            placeholder="0"
+                        />
+                    </div>
+                    <div className="grid gap-2">
+                        <Label htmlFor="precioTotal">Total ($)</Label>
+                        <Input
+                            id="precioTotal"
+                            type="number"
+                            step="1"
+                            {...register('precioTotal', { valueAsNumber: true })}
+                            placeholder="0"
+                            readOnly
+                            className="bg-muted"
+                        />
+                    </div>
                 </div>
 
                 {/* Detalle del Camión / Entrega */}

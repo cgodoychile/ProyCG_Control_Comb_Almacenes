@@ -24,8 +24,7 @@ function getDashboardStats() {
 function calculateCombustibleStats() {
   const sheet = getSheet(SHEET_NAMES.CONSUMOS);
   const data = sheet.getDataRange().getValues();
-  if (data.length <= 1) return { litrosMesActual: 0, litrosAnioActual: 0 };
-
+  
   const colMap = findColumnIndices(sheet, {
     FECHA: ['FECHA'],
     LITROS: ['LITROS_USADOS', 'LITROS', 'CANTIDAD']
@@ -44,23 +43,77 @@ function calculateCombustibleStats() {
   let totalLitrosMes = 0;
   let totalLitrosAnual = 0;
   
-  for (let i = 1; i < data.length; i++) {
-    const row = data[i];
-    const fecha = parseDate(row[fIdx]);
-    if (!fecha || isNaN(fecha.getTime())) continue;
-    
-    const cLitros = parseFloat(row[lIdx]) || 0;
-    if (fecha.getFullYear() === thisYear) {
-      totalLitrosAnual += cLitros;
-      if (fecha.getMonth() === thisMonth) {
-        totalLitrosMes += cLitros;
+  if (data.length > 1) {
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const fecha = parseDate(row[fIdx]);
+      if (!fecha || isNaN(fecha.getTime())) continue;
+      
+      const cLitros = parseFloat(row[lIdx]) || 0;
+      if (fecha.getFullYear() === thisYear) {
+        totalLitrosAnual += cLitros;
+        if (fecha.getMonth() === thisMonth) {
+          totalLitrosMes += cLitros;
+        }
       }
     }
+  }
+
+  // Calculate Costs from Cargas
+  let gastoMes = 0;
+  let gastoAnual = 0;
+  
+  // Debug info
+  let debugMsg = "";
+
+  try {
+      // Intenta usar el nombre de la constante, si falla, usa 'CargasEstanques' directo
+      let sheetCargas = getSheet(SHEET_NAMES.CARGAS);
+      if (!sheetCargas) sheetCargas = getSheet('CargasEstanques');
+      
+      if (sheetCargas) {
+          const dataCargas = sheetCargas.getDataRange().getValues();
+          if (dataCargas.length > 1) {
+              const colMapCargas = findColumnIndices(sheetCargas, {
+                  FECHA: ['FECHA', 'FECHA_INGRESO'],
+                  TOTAL: ['TOTAL', 'VALOR_TOTAL', 'COSTO_TOTAL', 'Total', 'Precio Total']
+              });
+              
+              // Fallback to Column O (Index 14) if TOTAL not found, as verified in browser
+              const totIdx = colMapCargas.TOTAL !== -1 ? colMapCargas.TOTAL : 14; 
+              const fcIdx = colMapCargas.FECHA !== -1 ? colMapCargas.FECHA : 1; // Default to B (Index 1)
+
+              for (let i = 1; i < dataCargas.length; i++) {
+                  const row = dataCargas[i];
+                  const fecha = parseDate(row[fcIdx]);
+                  
+                  if (!fecha || isNaN(fecha.getTime())) continue;
+
+                  // Clean value string (remove $ or dots if present)
+                  let rawVal = row[totIdx];
+                  if (typeof rawVal === 'string') {
+                      rawVal = rawVal.replace(/[\$\.]/g, '').replace(',', '.').trim();
+                  }
+                  const monto = parseFloat(rawVal) || 0;
+
+                  if (fecha.getFullYear() === thisYear) {
+                      gastoAnual += monto;
+                      if (fecha.getMonth() === thisMonth) {
+                          gastoMes += monto;
+                      }
+                  }
+              }
+          }
+      }
+  } catch(e) {
+      Logger.log("Error calculating costs: " + e);
   }
   
   return {
     litrosMesActual: totalLitrosMes,
     litrosAnioActual: totalLitrosAnual,
+    gastoMesActual: gastoMes,
+    gastoAnioActual: gastoAnual,
     estanquesLowStock: estanques.filter(e => (parseFloat(e.stockActual) || 0) < (parseFloat(e.stockMinimo) || 0)).length,
     totalStockDisponible: estanques.reduce((acc, e) => acc + (parseFloat(e.stockActual) || 0), 0)
   };

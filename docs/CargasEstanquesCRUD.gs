@@ -35,7 +35,9 @@ function updateCarga(id, data) {
                 OBSERVACIONES: ['OBSERVACIONES'],
                 PATENTE: ['PATENTE_CAMION', 'PATENTE'],
                 TIPO_COMB: ['TIPO_COMBUSTIBLE', 'COMBUSTIBLE'],
-                CONDUCTOR: ['CONDUCTOR']
+                CONDUCTOR: ['CONDUCTOR'],
+                PRECIO: ['PRECIO', 'PRECIO_UNITARIO', 'VALOR_LITRO'],
+                TOTAL: ['TOTAL', 'VALOR_TOTAL', 'COSTO_TOTAL']
             });
 
             const setVal = (key, val) => {
@@ -53,6 +55,8 @@ function updateCarga(id, data) {
             if (data.patenteCamion) setVal('PATENTE', data.patenteCamion);
             if (data.tipoCombustible) setVal('TIPO_COMB', data.tipoCombustible);
             if (data.conductor) setVal('CONDUCTOR', data.conductor);
+            if (data.precioUnitario !== undefined) setVal('PRECIO', data.precioUnitario);
+            if (data.precioTotal !== undefined) setVal('TOTAL', data.precioTotal);
 
             return createResponse(true, { id, ...data }, "Carga actualizada");
         }
@@ -117,7 +121,9 @@ function getAllCargas() {
         OBSERVACIONES: ['OBSERVACIONES'],
         PATENTE: ['PATENTE_CAMION', 'PATENTE'],
         TIPO_COMB: ['TIPO_COMBUSTIBLE', 'COMBUSTIBLE'],
-        CONDUCTOR: ['CONDUCTOR']
+        CONDUCTOR: ['CONDUCTOR'],
+        PRECIO: ['PRECIO', 'PRECIO_UNITARIO', 'VALOR_LITRO'],
+        TOTAL: ['TOTAL', 'VALOR_TOTAL', 'COSTO_TOTAL']
     });
 
     const cargas = [];
@@ -147,7 +153,9 @@ function getAllCargas() {
             observaciones: colMap.OBSERVACIONES !== -1 ? row[colMap.OBSERVACIONES] : '',
             patenteCamion: colMap.PATENTE !== -1 ? row[colMap.PATENTE] : '',
             tipoCombustible: colMap.TIPO_COMB !== -1 ? row[colMap.TIPO_COMB] : '',
-            conductor: colMap.CONDUCTOR !== -1 ? row[colMap.CONDUCTOR] : ''
+            conductor: colMap.CONDUCTOR !== -1 ? row[colMap.CONDUCTOR] : '',
+            precioUnitario: colMap.PRECIO !== -1 ? (parseFloat(row[colMap.PRECIO]) || 0) : 0,
+            precioTotal: colMap.TOTAL !== -1 ? (parseFloat(row[colMap.TOTAL]) || 0) : 0
         });
     }
   return createResponse(true, cargas);
@@ -174,7 +182,9 @@ function createCarga(data) {
         OBSERVACIONES: ['OBSERVACIONES'],
         PATENTE: ['PATENTE_CAMION', 'PATENTE'],
         TIPO_COMB: ['TIPO_COMBUSTIBLE', 'COMBUSTIBLE'],
-        CONDUCTOR: ['CONDUCTOR']
+        CONDUCTOR: ['CONDUCTOR'],
+        PRECIO: ['PRECIO', 'PRECIO_UNITARIO', 'VALOR_LITRO'],
+        TOTAL: ['TOTAL', 'VALOR_TOTAL', 'COSTO_TOTAL']
     });
 
     // Generate ID
@@ -201,6 +211,8 @@ function createCarga(data) {
     set(colMap.PATENTE !== -1 ? colMap.PATENTE : 10, data.patenteCamion || '');
     set(colMap.TIPO_COMB !== -1 ? colMap.TIPO_COMB : 11, data.tipoCombustible || '');
     set(colMap.CONDUCTOR !== -1 ? colMap.CONDUCTOR : 12, data.conductor || '');
+    set(colMap.PRECIO !== -1 ? colMap.PRECIO : 13, data.precioUnitario || 0);
+    set(colMap.TOTAL !== -1 ? colMap.TOTAL : 14, data.precioTotal || 0);
     
     sheet.appendRow(newRow);
     

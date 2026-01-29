@@ -307,7 +307,7 @@ export function ReportesModule() {
                     c.litrosUsados,
                     c.empresa || '-',
                     c.responsable || '-',
-                    c.observaciones || '-'
+                    c.justificacion || '-'
                 ]);
                 break;
             case 'cargas':
@@ -369,7 +369,7 @@ export function ReportesModule() {
                     Litros: c.litrosUsados,
                     Persona: c.empresa,
                     Responsable: c.responsable,
-                    Justificacion: c.observaciones
+                    Justificacion: c.justificacion
                 }));
                 break;
             case 'cargas':
@@ -945,7 +945,7 @@ export function ReportesModule() {
                                                                 {row.litrosUsados} L
                                                             </td>
                                                             <td className="text-muted-foreground uppercase text-[9px] font-bold">{row.empresa}</td>
-                                                            <td className="text-muted-foreground italic truncate max-w-[150px]">{row.observaciones}</td>
+                                                            <td className="text-muted-foreground italic max-w-[200px] whitespace-normal break-words text-[10px]">{row.justificacion || '-'}</td>
                                                         </>
                                                     )}
                                                     {selectedReport === 'cargas' && (

@@ -10,7 +10,7 @@ import { DashboardDetailsModal } from '@/components/dashboard/DashboardDetailsMo
 import { estanquesApi, consumosApi, vehiculosApi, dashboardApi } from '@/lib/apiService';
 import { useAlerts } from '@/hooks/useAlerts';
 import { subDays, isAfter, format, isSameDay, isSameMonth } from 'date-fns';
-import { Fuel, Database, Truck, Bell, TrendingUp, TrendingDown, Gauge, Loader2, AlertTriangle } from 'lucide-react';
+import { Fuel, Database, Truck, Bell, TrendingUp, TrendingDown, Gauge, Loader2, AlertTriangle, DollarSign } from 'lucide-react';
 
 export function DashboardModule() {
   const [modalOpen, setModalOpen] = useState(false);
@@ -40,7 +40,7 @@ export function DashboardModule() {
   });
 
   const stats = statsResponse?.data || {
-    combustible: { litrosMesActual: 0, litrosAnioActual: 0, estanquesLowStock: 0, totalStockDisponible: 0 },
+    combustible: { litrosMesActual: 0, litrosAnioActual: 0, estanquesLowStock: 0, totalStockDisponible: 0, gastoMesActual: 0, gastoAnioActual: 0 },
     almacenes: { totalBodegas: 0, valorInventarioTotal: 0 },
     alertas: 0,
     flota: { totalVehiculos: 0, enMantencion: 0, mantencionesPendientes: 0 }
@@ -210,6 +210,13 @@ export function DashboardModule() {
             setModalType('consumoMensual');
             setModalOpen(true);
           }}
+        />
+        <KPICard
+          title="Gasto Mensual"
+          value={`$${(stats.combustible.gastoMesActual || 0).toLocaleString('es-CL')}`}
+          subtitle="Costo Combustible Ingresado"
+          icon={DollarSign}
+          variant="warning"
         />
         <KPICard
           title="Consumo Anual"

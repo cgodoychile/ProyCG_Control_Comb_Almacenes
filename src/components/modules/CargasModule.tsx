@@ -212,6 +212,28 @@ export function CargasModule() {
 
   const proveedoresActivos = [...new Set(filteredCargas.map(c => c.proveedor))].length;
 
+  // Calculate costs insitu
+  const hoy = new Date();
+  const currentMonth = hoy.getMonth();
+  const currentYear = hoy.getFullYear();
+
+  let gastoMes = 0;
+  let gastoAnual = 0;
+
+  filteredCargas.forEach((c: any) => {
+    const fecha = parseDate(c.fecha);
+    if (isNaN(fecha.getTime())) return;
+
+    const total = Number(c.precioTotal) || Number(c.total) || 0;
+
+    if (fecha.getFullYear() === currentYear) {
+      gastoAnual += total;
+      if (fecha.getMonth() === currentMonth) {
+        gastoMes += total;
+      }
+    }
+  });
+
   // Format date safely
   const formatDate = (dateString: string) => {
     if (!dateString) return '-';
@@ -253,7 +275,7 @@ export function CargasModule() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="card-fuel p-6 rounded-xl border border-border">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-accent/20 flex items-center justify-center">
@@ -263,29 +285,47 @@ export function CargasModule() {
               <p className="text-2xl font-bold text-foreground">
                 {totalLitrosMes.toLocaleString()} L
               </p>
-              <p className="text-sm text-muted-foreground">Compras este mes</p>
+              <p className="text-sm text-muted-foreground">Litros este mes</p>
             </div>
           </div>
         </div>
+
         <div className="card-fuel p-6 rounded-xl border border-border">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-success/20 flex items-center justify-center">
-              <FileText className="w-6 h-6 text-success" />
+              <span className="text-xl font-bold text-success">$</span>
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">{cargasData.length}</p>
-              <p className="text-sm text-muted-foreground">Cargas registradas</p>
+              <p className="text-2xl font-bold text-foreground">
+                ${gastoMes.toLocaleString()}
+              </p>
+              <p className="text-sm text-muted-foreground">Gasto Mensual</p>
             </div>
           </div>
         </div>
+
         <div className="card-fuel p-6 rounded-xl border border-border">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
-              <FileText className="w-6 h-6 text-primary" />
+              <span className="text-xl font-bold text-primary">$</span>
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">{proveedoresActivos}</p>
-              <p className="text-sm text-muted-foreground">Proveedores activos</p>
+              <p className="text-2xl font-bold text-foreground">
+                ${gastoAnual.toLocaleString()}
+              </p>
+              <p className="text-sm text-muted-foreground">Gasto Anual</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="card-fuel p-6 rounded-xl border border-border">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-secondary/20 flex items-center justify-center">
+              <FileText className="w-6 h-6 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-foreground">{cargasData.length}</p>
+              <p className="text-sm text-muted-foreground">Total Cargas</p>
             </div>
           </div>
         </div>
@@ -316,73 +356,69 @@ export function CargasModule() {
               <thead className="bg-secondary/50">
                 <tr>
                   <th>Fecha</th>
-                  <th>N° Guía/Factura</th>
-                  <th>Tipo</th>
+                  <th>N° Guía</th>
                   <th>Estanque</th>
-                  <th>Proveedor</th>
-                  <th>Patente</th>
-                  <th>Conductor</th>
+                  <th>Prov.</th>
+                  <th>Precio Unit.</th>
+                  <th>Total ($)</th>
                   <th>Litros</th>
                   <th>Responsable</th>
-                  <th>Observaciones</th>
                   {canEdit && <th>Acciones</th>}
                 </tr>
               </thead>
               <tbody>
-                {filteredCargas.map((carga) => (
-                  <tr key={carga.id} className="animate-fade-in">
-                    <td className="font-mono text-sm">{formatDate(carga.fecha)}</td>
-                    <td>
-                      <span className="font-mono bg-secondary px-2 py-1 rounded text-sm">
-                        {carga.numeroGuia || '-'}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={cn(
-                        "px-2 py-0.5 rounded-full text-[10px] uppercase font-bold",
-                        "bg-primary/10 text-primary"
-                      )}>
-                        {carga.tipoCombustible || '-'}
-                      </span>
-                    </td>
-                    <td>{carga.estanque || '-'}</td>
-                    <td className="text-muted-foreground">{carga.proveedor || '-'}</td>
-                    <td className="text-xs">{carga.patenteCamion || '-'}</td>
-                    <td className="text-xs">{carga.conductor || '-'}</td>
-                    <td>
-                      <span className="font-mono font-medium text-success">
-                        +{(carga.litros || 0).toLocaleString()} L
-                      </span>
-                    </td>
-                    <td className="text-sm">{carga.responsable || '-'}</td>
-                    <td className="text-sm text-muted-foreground">
-                      {carga.observaciones || '-'}
-                    </td>
-                    {canEdit && (
+                {filteredCargas.map((carga) => {
+                  const pUnit = Number(carga.precioUnitario) || Number(carga.precio) || 0;
+                  const pTotal = Number(carga.precioTotal) || Number(carga.total) || 0;
+                  return (
+                    <tr key={carga.id} className="animate-fade-in">
+                      <td className="font-mono text-xs">{formatDate(carga.fecha)}</td>
                       <td>
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={(e) => handleEdit(e, carga)}
-                            title="Editar carga"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={(e) => handleDelete(e, carga)}
-                            className="hover:bg-destructive/10"
-                            title="Eliminar carga"
-                          >
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
-                        </div>
+                        <span className="font-mono bg-secondary px-2 py-1 rounded text-xs">
+                          {carga.numeroGuia || '-'}
+                        </span>
                       </td>
-                    )}
-                  </tr>
-                ))}
+                      <td className="text-xs">{carga.estanque || '-'}</td>
+                      <td className="text-xs text-muted-foreground">{carga.proveedor || '-'}</td>
+                      <td className="text-xs text-right font-mono">
+                        {pUnit > 0 ? `$${pUnit.toLocaleString()}` : '-'}
+                      </td>
+                      <td className="text-xs text-right font-mono font-semibold">
+                        {pTotal > 0 ? `$${pTotal.toLocaleString()}` : '-'}
+                      </td>
+                      <td>
+                        <span className="font-mono font-medium text-success text-xs">
+                          +{(carga.litros || 0).toLocaleString()} L
+                        </span>
+                      </td>
+                      <td className="text-xs">{carga.responsable || '-'}</td>
+                      {canEdit && (
+                        <td>
+                          <div className="flex gap-2 justify-end">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => handleEdit(e, carga)}
+                              title="Editar carga"
+                              className="h-8 w-8 p-0"
+                            >
+                              <Edit className="w-3 h-3" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => handleDelete(e, carga)}
+                              className="h-8 w-8 p-0 hover:bg-destructive/10"
+                              title="Eliminar carga"
+                            >
+                              <Trash2 className="w-3 h-3 text-destructive" />
+                            </Button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

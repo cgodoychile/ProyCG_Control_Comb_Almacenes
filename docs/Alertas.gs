@@ -4,30 +4,52 @@
 
 function createAlerta(modulo, tipo, mensaje, responsable, accion) {
   try {
-    const ss = SpreadsheetApp.openById(SPREADSHEETID);
-    const sheet = ss.getSheetByName('Alertas') || ss.insertSheet('Alertas');
-    
-    // MAPEO POSICIONAL ESTRICTO v1.1 (ID, FECHA, TIPO, MODULO, MENSAJE, RESPONSABLE, ESTADO, ACCION)
-    const id = "ALR-" + new Date().getTime();
-    const fecha = new Date();
-    
-    const newRow = Array(8).fill('');
-    newRow[0] = id;
-    newRow[1] = fecha;
-    newRow[2] = (tipo || 'info').toLowerCase();
-    newRow[3] = (modulo || 'Sistema').charAt(0).toUpperCase() + (modulo || 'Sistema').slice(1).toLowerCase();
-    newRow[4] = String(mensaje || '');
-    newRow[5] = responsable || 'Sistema';
-    newRow[6] = 'PENDIENTE';
-    newRow[7] = typeof accion === 'object' ? JSON.stringify(accion) : String(accion || '');
-    
-    const lastRow = sheet.getLastRow();
-    if (lastRow === 0) {
-      sheet.appendRow(['ID', 'FECHA', 'TIPO', 'MODULO', 'MENSAJE', 'RESPONSABLE', 'ESTADO', 'ACCION']);
+    const sheet = getSheet('Alertas');
+    if (!sheet) {
+      console.error("Hoja Alertas no encontrada");
+      return null;
     }
     
-    sheet.getRange(sheet.getLastRow() + 1, 1, 1, 8).setValues([newRow]);
-    SpreadsheetApp.flush();
+    // Use dynamic mapping
+    const colMap = findColumnIndices(sheet, {
+        ID: ['ID'],
+        FECHA: ['FECHA', 'DATE', 'TIMESTAMP'],
+        TIPO: ['TIPO', 'LEVEL', 'NIVEL'],
+        MODULO: ['MODULO', 'SOURCE', 'ORIGEN'],
+        MENSAJE: ['MENSAJE', 'MSG', 'DETALLE'],
+        RESPONSABLE: ['RESPONSABLE', 'USER', 'USUARIO'],
+        ESTADO: ['ESTADO', 'STATUS'],
+        ACCION: ['ACCION', 'ACTION', 'DATA']
+    });
+
+    // Fallback to strict array if headers are missing (Sheet initialization)
+    if (Object.keys(colMap).length === 0) {
+       // Assuming it was just created or empty
+       sheet.appendRow(['ID', 'FECHA', 'TIPO', 'MODULO', 'MENSAJE', 'RESPONSABLE', 'ESTADO', 'ACCION']);
+       return createAlerta(modulo, tipo, mensaje, responsable, accion); // Retry once
+    }
+
+    const id = "ALR-" + new Date().getTime();
+    
+    // Determine max column index to create the array
+    const maxIdx = Math.max(...Object.values(colMap), 7);
+    const newRow = Array(maxIdx + 1).fill('');
+
+    const set = (keyIdx, val) => {
+        if (keyIdx !== -1) newRow[keyIdx] = val;
+    };
+
+    // Default indices if mapping fails but headers exist (Fail-safe order: ID, FECHA, TIPO, MODULO, MENSAJE, RESPONSABLE, ESTADO, ACCION)
+    set(colMap.ID !== -1 ? colMap.ID : 0, id);
+    set(colMap.FECHA !== -1 ? colMap.FECHA : 1, new Date());
+    set(colMap.TIPO !== -1 ? colMap.TIPO : 2, (tipo || 'info').toLowerCase());
+    set(colMap.MODULO !== -1 ? colMap.MODULO : 3, (modulo || 'Sistema').charAt(0).toUpperCase() + (modulo || 'Sistema').slice(1).toLowerCase());
+    set(colMap.MENSAJE !== -1 ? colMap.MENSAJE : 4, String(mensaje || ''));
+    set(colMap.RESPONSABLE !== -1 ? colMap.RESPONSABLE : 5, responsable || 'Sistema');
+    set(colMap.ESTADO !== -1 ? colMap.ESTADO : 6, 'PENDIENTE');
+    set(colMap.ACCION !== -1 ? colMap.ACCION : 7, typeof accion === 'object' ? JSON.stringify(accion) : String(accion || ''));
+    
+    sheet.appendRow(newRow);
     return id;
   } catch (e) {
     console.error("Error creando alerta: " + e.toString());
@@ -37,30 +59,44 @@ function createAlerta(modulo, tipo, mensaje, responsable, accion) {
 
 function getActiveAlertas() {
   try {
-    const sheet = getSheet(SHEET_NAMES.ALERTAS);
+    const sheet = getSheet('Alertas');
+    if (!sheet) return createResponse(true, []);
+
     const data = sheet.getDataRange().getValues();
     if (data.length <= 1) return createResponse(true, []);
     
-    const mapping = COLUMNS.ALERTAS;
+    const colMap = findColumnIndices(sheet, {
+        ID: ['ID'],
+        FECHA: ['FECHA'],
+        TIPO: ['TIPO'],
+        MODULO: ['MODULO'],
+        MENSAJE: ['MENSAJE'],
+        RESPONSABLE: ['RESPONSABLE'],
+        ESTADO: ['ESTADO'],
+        ACCION: ['ACCION']
+    });
+
     const alertas = [];
+    const idIdx = colMap.ID !== -1 ? colMap.ID : 0;
+    const stIdx = colMap.ESTADO !== -1 ? colMap.ESTADO : 6;
     
     // Leer desde el final, ignorando cabecera
     for (let i = data.length - 1; i >= 1; i--) {
       const row = data[i];
-      if (!row[0]) continue; // Saltar filas vacías
+      if (!row[idIdx]) continue; 
       
-      const estado = String(row[6] || 'PENDIENTE').toUpperCase();
+      const estado = String(row[stIdx] || 'PENDIENTE').toUpperCase();
       if (estado !== 'PENDIENTE') continue;
 
       alertas.push({
-        id: String(row[0]),
-        fecha: formatDate(row[1]),
-        tipo: String(row[2] || 'info').toLowerCase(),
-        modulo: String(row[3] || 'Sistema'),
-        mensaje: String(row[4] || ''),
-        responsable: String(row[5] || 'Sistema'),
+        id: String(row[idIdx]),
+        fecha: formatDate(row[colMap.FECHA !== -1 ? colMap.FECHA : 1]),
+        tipo: String(row[colMap.TIPO !== -1 ? colMap.TIPO : 2] || 'info').toLowerCase(),
+        modulo: String(row[colMap.MODULO !== -1 ? colMap.MODULO : 3] || 'Sistema'),
+        mensaje: String(row[colMap.MENSAJE !== -1 ? colMap.MENSAJE : 4] || ''),
+        responsable: String(row[colMap.RESPONSABLE !== -1 ? colMap.RESPONSABLE : 5] || 'Sistema'),
         estado: estado,
-        accion: String(row[7] || '')
+        accion: String(row[colMap.ACCION !== -1 ? colMap.ACCION : 7] || '')
       });
     }
     
@@ -72,12 +108,20 @@ function getActiveAlertas() {
 
 function markAlertaAsSeen(id) {
   try {
-    const sheet = getSheet(SHEET_NAMES.ALERTAS);
+    const sheet = getSheet('Alertas');
     const data = sheet.getDataRange().getValues();
     
+    const colMap = findColumnIndices(sheet, {
+        ID: ['ID'],
+        ESTADO: ['ESTADO']
+    });
+    
+    const idIdx = colMap.ID !== -1 ? colMap.ID : 0;
+    const stIdx = colMap.ESTADO !== -1 ? colMap.ESTADO : 6;
+
     for (let i = 1; i < data.length; i++) {
-      if (String(data[i][0]) === String(id)) {
-        sheet.getRange(i + 1, 7).setValue('VISTO'); // Columna G
+      if (String(data[i][idIdx]) === String(id)) {
+        sheet.getRange(i + 1, stIdx + 1).setValue('VISTO');
         return createResponse(true, null, "Alerta marcada como vista");
       }
     }
@@ -87,89 +131,7 @@ function markAlertaAsSeen(id) {
   }
 }
 
-/**
- * REPARACIÓN FORENSE DE ALERTAS v1.1
- * Basado en el patrón de desalineación detectado
- */
 function repairAlertasData() {
-  try {
-    const ss = SpreadsheetApp.openById(SPREADSHEETID);
-    const sheet = ss.getSheetByName('Alertas');
-    if (!sheet) return "Hoja Alertas no encontrada";
-    
-    const data = sheet.getDataRange().getValues();
-    const fixedRows = [];
-    // Cabecera Estándar v1.1
-    fixedRows.push(['ID', 'FECHA', 'TIPO', 'MODULO', 'MENSAJE', 'RESPONSABLE', 'ESTADO', 'ACCION']);
-    
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i];
-      if (!row[0] && !row[1]) continue;
-
-      let id = String(row[0] || '');
-      let fecha = new Date();
-      let tipo = 'info';
-      let modulo = 'Sistema';
-      let mensaje = '';
-      let responsable = 'Sistema';
-      let estado = 'PENDIENTE';
-      let accion = '';
-
-      // HEURÍSTICA DE REPARACIÓN
-      row.forEach((cell, idx) => {
-        const s = String(cell || "").trim();
-        
-        // Buscar ID
-        if (s.startsWith("ALR-")) id = s;
-        
-        // Buscar Fecha (puede estar en B o F según el desfase)
-        if (cell instanceof Date || (s.includes(":") && !isNaN(new Date(s).getTime()))) {
-           fecha = new Date(cell);
-        }
-
-        // Buscar Tipo
-        if (['info', 'warning', 'critical', 'success', 'high', 'alta'].includes(s.toLowerCase())) {
-          tipo = s.toLowerCase().replace('alta', 'critical').replace('high', 'warning');
-        }
-
-        // Buscar Estado/Leída
-        if (['pendiente', 'visto', 'leida', 'leído'].includes(s.toLowerCase())) {
-          estado = s.toUpperCase().replace('LEIDA', 'VISTO').replace('LEÍDO', 'VISTO');
-        }
-      });
-
-      // Mapeo por Posición Específica (Parche para el desfase detectado)
-      // Patrón 1: [ID, FECHA_MAL, TIPO_MAL, MODULO, EMPTY, FECHA_BIEN, USER, ACCION]
-      if (row.length >= 6) {
-        if (row[1] instanceof Date && !id.startsWith("ALR-")) {
-          // Si no hay ID en A, tal vez está en otro lado? No, generamos uno.
-        }
-        
-        // Si hay un nombre de usuario en G (pos 6), lo tomamos como responsable
-        const potentialUser = String(row[6] || "").trim();
-        if (potentialUser && !['PENDIENTE', 'VISTO'].includes(potentialUser.toUpperCase()) && potentialUser.length > 2) {
-          responsable = potentialUser;
-        }
-
-        // El mensaje suele ser la columna más larga o estar en C/E
-        mensaje = String(row[4] || row[3] || row[2] || "");
-        if (mensaje === modulo || mensaje === tipo) mensaje = String(row[4] || "");
-        
-        modulo = String(row[3] || modulo);
-        accion = String(row[7] || "");
-      }
-
-      if (!id) id = "ALR-AUTO-" + i;
-      fixedRows.push([id, fecha, tipo, modulo, mensaje, responsable, estado, accion]);
-    }
-
-    sheet.clear();
-    sheet.getRange(1, 1, fixedRows.length, 8).setValues(fixedRows);
-    sheet.getRange(1, 1, 1, 8).setFontWeight("bold").setBackground("#f3f4f6");
-    SpreadsheetApp.flush();
-    
-    return `Reparación Alertas v1.1 completada: ${fixedRows.length - 1} registros.`;
-  } catch (e) {
-    return "Error: " + e.toString();
-  }
+  // Not strictly needed with dynamic mapping, but kept for legacy cleanup if requested
+  return "Función de reparación manual deshabilitada. El sistema ahora usa mapeo dinámico.";
 }

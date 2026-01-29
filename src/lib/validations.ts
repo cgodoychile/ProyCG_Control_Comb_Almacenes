@@ -8,7 +8,7 @@ export const consumoSchema = z.object({
     estanque: z.string().min(1, 'El estanque es requerido'),
     litrosUsados: z.number()
         .min(0.1, 'Los litros deben ser mayor a 0')
-        .max(200, 'Los litros no pueden exceder 200L'),
+        .max(2000, 'Los litros no pueden exceder 2000L'),
     kilometraje: z.number().min(0, 'El kilometraje debe ser positivo'),
     contadorInicial: z.number().min(0, 'El contador inicial debe ser positivo'),
     contadorFinal: z.number().min(0, 'El contador final debe ser positivo'),
@@ -19,6 +19,11 @@ export const consumoSchema = z.object({
     message: 'El contador final debe ser mayor o igual al inicial',
     path: ['contadorFinal'],
 }).refine((data) => {
+    // Si litros > 200, la justificación es obligatoria y más detallada
+    if (data.litrosUsados > 200) {
+        const value = data.justificacion || data.observaciones;
+        return value && value.length >= 15;
+    }
     // Si litros > 80, una de las dos debe ser obligatoria y tener >= 10 caracteres
     if (data.litrosUsados > 80) {
         const value = data.justificacion || data.observaciones;
@@ -26,7 +31,7 @@ export const consumoSchema = z.object({
     }
     return true;
 }, {
-    message: 'Debe justificar consumos mayores a 80L (mínimo 10 caracteres)',
+    message: 'Debe justificar el consumo. Si es >200L, detalle motivo (min 15 chars).',
     path: ['justificacion'],
 });
 
@@ -68,6 +73,8 @@ export const cargaSchema = z.object({
     patenteCamion: z.string().optional(),
     tipoCombustible: z.string().optional(),
     conductor: z.string().optional(),
+    precioUnitario: z.number().min(0, 'Precio debe ser positivo').optional(),
+    precioTotal: z.number().min(0, 'Total debe ser positivo').optional(),
 }).refine((data) => {
     if (data.tipo === 'real' && !data.numeroGuia) {
         return false;

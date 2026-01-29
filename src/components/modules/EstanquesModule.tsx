@@ -46,6 +46,8 @@ export function EstanquesModule() {
   const [agendamientoToConfirm, setAgendamientoToConfirm] = useState<any>(null);
   const [numeroGuia, setNumeroGuia] = useState('');
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [confirmPrice, setConfirmPrice] = useState<number>(0);
+  const [confirmTotal, setConfirmTotal] = useState<number>(0);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -242,6 +244,8 @@ export function EstanquesModule() {
     console.log('🔔 Confirmar Arribo clicked for:', carga);
     setAgendamientoToConfirm(carga);
     setNumeroGuia('');
+    setConfirmPrice(0);
+    setConfirmTotal(0);
     setIsConfirmDialogOpen(true);
   };
 
@@ -270,6 +274,8 @@ export function EstanquesModule() {
       patenteCamion: cargaOriginal.patenteCamion || '',
       tipoCombustible: cargaOriginal.tipoCombustible || '',
       conductor: cargaOriginal.conductor || '',
+      precioUnitario: confirmPrice,
+      precioTotal: confirmTotal,
       observaciones: `Carga arribada desde agendamiento. ${cargaOriginal.observaciones || ''}`
     };
 
@@ -603,12 +609,33 @@ export function EstanquesModule() {
                 value={numeroGuia}
                 onChange={(e) => setNumeroGuia(e.target.value)}
                 placeholder="Ej: 123456"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleConfirmSubmit();
-                  }
-                }}
               />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="confirmPrice">Precio Unitario ($)</Label>
+                <Input
+                  id="confirmPrice"
+                  type="number"
+                  value={confirmPrice || ''}
+                  onChange={(e) => {
+                    const price = parseFloat(e.target.value) || 0;
+                    setConfirmPrice(price);
+                    setConfirmTotal(price * (agendamientoToConfirm?.litros || 0));
+                  }}
+                  placeholder="0"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="confirmTotal">Total ($)</Label>
+                <Input
+                  id="confirmTotal"
+                  type="number"
+                  value={confirmTotal || ''}
+                  readOnly
+                  className="bg-muted"
+                />
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -638,7 +665,6 @@ export function EstanquesModule() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       {/* Delete Confirmation Dialog */}
       <ConfirmDeleteWithJustificationDialog
         open={isDeleteDialogOpen}
@@ -655,6 +681,5 @@ export function EstanquesModule() {
         isCritical={true}
       />
     </div>
-
   );
 }

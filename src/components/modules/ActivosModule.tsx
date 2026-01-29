@@ -33,6 +33,12 @@ export function ActivosModule() {
   const [activoToDelete, setActivoToDelete] = useState<any>(null);
   const [deleteFromWarehouse, setDeleteFromWarehouse] = useState(false);
   const [printingData, setPrintingData] = useState<any>(null);
+  const [activoForCargo, setActivoForCargo] = useState<any>(null);
+  const [cargoData, setCargoData] = useState({
+    responsable: '',
+    cargo: '',
+    observaciones: ''
+  });
 
   const labelRef = useRef<HTMLDivElement>(null);
   const printRef = useRef<HTMLDivElement>(null);
@@ -50,6 +56,39 @@ export function ActivosModule() {
     setTimeout(() => {
       if (handlePrintActa) handlePrintActa();
     }, 300);
+  };
+
+  const handleOpenCargoDialog = (activo: any) => {
+    setActivoForCargo(activo);
+    setCargoData({
+      responsable: activo.responsable || '',
+      cargo: 'Operario / Responsable de Equipo',
+      observaciones: ''
+    });
+  };
+
+  const handleConfirmCargo = async () => {
+    if (!activoForCargo) return;
+
+    const payload = {
+      activoId: activoForCargo.id,
+      responsable: cargoData.responsable,
+      fecha: new Date().toLocaleDateString('es-CL'),
+      cargo: cargoData.cargo,
+      equipo: activoForCargo.nombre,
+      serie: activoForCargo.numeroSerie || activoForCargo.id,
+      marca: activoForCargo.marca,
+      modelo: activoForCargo.modelo,
+      observaciones: cargoData.observaciones
+    };
+
+    await execute(actasApi.generateCargo(payload), {
+      successMessage: "✅ Acta de Cargo generada en sistema.",
+      onSuccess: () => {
+        triggerPrint(payload);
+        setActivoForCargo(null);
+      }
+    });
   };
 
   // Data Fetching
@@ -334,23 +373,7 @@ export function ActivosModule() {
                           size="icon"
                           variant="outline"
                           className="h-9 w-9 text-orange-500 border-orange-500/30 hover:bg-orange-500/10 hover:border-orange-500 hover:text-orange-600 transition-all duration-300 shadow-sm"
-                          onClick={async () => {
-                            const payload = {
-                              activoId: activo.id,
-                              responsable: activo.responsable,
-                              fecha: new Date().toLocaleDateString('es-CL'),
-                              cargo: 'Operario / Responsable de Equipo',
-                              equipo: activo.nombre,
-                              serie: activo.numeroSerie || activo.id,
-                              marca: activo.marca,
-                              modelo: activo.modelo
-                            };
-
-                            await execute(actasApi.generateCargo(payload), {
-                              successMessage: "✅ Acta de Cargo generada en sistema.",
-                              onSuccess: () => triggerPrint(payload)
-                            });
-                          }}
+                          onClick={() => handleOpenCargoDialog(activo)}
                           title="Generar e Imprimir Acta de Cargo"
                         >
                           <Printer className="w-4 h-4" />
@@ -448,6 +471,53 @@ export function ActivosModule() {
           <PrintableCargoForm ref={printRef} data={printingData} />
         )}
       </div>
+
+      {/* Dialog for Generating Cargo Document */}
+      <Dialog open={!!activoForCargo} onOpenChange={(open) => !open && setActivoForCargo(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Generar Acta de Cargo</DialogTitle>
+            <DialogDescription>
+              Confirme los datos del responsable para generar el documento oficial.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="cargoResponsable">Nombre Responsable</Label>
+              <Input
+                id="cargoResponsable"
+                value={cargoData.responsable}
+                onChange={(e) => setCargoData({ ...cargoData, responsable: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="cargoRole">Cargo / Rol</Label>
+              <Input
+                id="cargoRole"
+                value={cargoData.cargo}
+                onChange={(e) => setCargoData({ ...cargoData, cargo: e.target.value })}
+                placeholder="Ej: Operario, Jefe de Terreno..."
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="cargoObs">Observaciones (Opcional)</Label>
+              <Input
+                id="cargoObs"
+                value={cargoData.observaciones}
+                onChange={(e) => setCargoData({ ...cargoData, observaciones: e.target.value })}
+                placeholder="Estado del equipo, accesorios..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setActivoForCargo(null)}>Cancelar</Button>
+            <Button onClick={handleConfirmCargo} disabled={!cargoData.responsable || isActionLoading}>
+              {isActionLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Printer className="w-4 h-4 mr-2" />}
+              Generar e Imprimir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
