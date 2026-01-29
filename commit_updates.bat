@@ -8,7 +8,7 @@ echo Agregando archivos...
 git add .
 echo.
 echo Realizando commit...
-git commit -m "Fix: Auditoria v8.7 (Absoluta) y Alertas v1.1 (Forense) + UI Responsiva"
+git commit -m "Fix: Consumos - Ordenamiento por Fecha/Contador y Auto-ID Backend"
 echo.
 echo ==========================================
 echo  COMMIT REALIZADO CORRECTAMENTE

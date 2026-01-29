@@ -17,9 +17,10 @@ function onEdit(e) {
     console.log("Massive load detected: " + numRows + " rows edited in " + sheetName);
   }
 
-  // 2. Sync Consumos with Estanques (Deduct stock)
+  // 2. Sync Consumos with Estanques (Deduct stock) & Auto-ID
   // If editing the 'EnelComb' sheet
   if (sheetName === SHEET_NAMES.CONSUMOS) {
+    handleConsumoAutoId(e);
     handleConsumoStockSync(e);
   }
 }
@@ -45,4 +46,34 @@ function handleConsumoStockSync(e) {
   
   // Update the tank stock
   updateEstanqueStock(estanqueNombre, -litrosUsados);
+}
+
+/**
+ * Automatically generates an ID for new rows added manually to the Consumos sheet.
+ */
+function handleConsumoAutoId(e) {
+  const range = e.range;
+  const sheet = range.getSheet();
+  const row = range.getRow();
+  
+  if (row <= 1) return; // Header
+
+  // Check if ID is present
+  // We use findColumnIndices to be safe, or fallback to Config
+  // Since we are inside a trigger, let's try to be lightweight but robust enough.
+  // We'll trust column 1 (index 0) is ID as per standard, but let's check header if possible.
+  // To avoid overhead, we'll check the value at Column 1 of the current row.
+  
+  // We need to know which column is ID. 
+  // Config.gs says COLUMNS.CONSUMOS.ID = 0 (Column A).
+  // Let's assume Column 1 is ID.
+  const idCell = sheet.getRange(row, 1);
+  const idValue = idCell.getValue();
+  
+  if (!idValue || String(idValue).trim() === '') {
+    // Generate new ID
+    const newId = generateSequentialId('CONS', SHEET_NAMES.CONSUMOS, 'ID', 7);
+    idCell.setValue(newId);
+    console.log(`Generated Auto ID for row ${row}: ${newId}`);
+  }
 }

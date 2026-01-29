@@ -296,8 +296,21 @@ export function ConsumoModule() {
       });
     }
 
-    // Sort by date desc using safe parser
-    return data.sort((a, b) => parseSafeDate(b.fecha).getTime() - parseSafeDate(a.fecha).getTime());
+    // Sort by date desc, then by counter (contadorFinal) desc to ensure latest load is first
+    return data.sort((a, b) => {
+      const dateA = parseSafeDate(a.fecha).getTime();
+      const dateB = parseSafeDate(b.fecha).getTime();
+
+      // Primary sort: Date DESC
+      if (dateB !== dateA) {
+        return dateB - dateA;
+      }
+
+      // Secondary sort: Contador Final DESC (Higher counter = later charge)
+      const counterA = parseFloat(a.contadorFinal) || 0;
+      const counterB = parseFloat(b.contadorFinal) || 0;
+      return counterB - counterA;
+    });
   }, [consumosData, searchTerm, fechaDesde, fechaHasta, showOnlyExcessive, showOnlyCriticalKPI]);
 
   const totalPages = Math.ceil(filteredData.length / itemsPerPage);
