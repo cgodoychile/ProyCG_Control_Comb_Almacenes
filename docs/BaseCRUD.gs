@@ -78,7 +78,8 @@ function handleCreate(entity, rawData, responsable) {
     processImpact(entityKey, rawData, 'CREATE');
     
     // Registrar Alerta/Auditoría
-    createAlerta(entity, 'ALTA', `Nuevo registro en ${entity}: ${rawData.id || 'N/A'}`, responsable);
+    createAlerta(entity, 'info', `Nuevo registro en ${entity}: ${rawData.id || 'N/A'}`, responsable, 'crear');
+    registrarAccion(entity, 'crear', `Nuevo registro: ${rawData.id || 'N/A'}`, 'success', responsable, rawData.justificacion || '');
     
     return createResponse(true, { id: rawData.id }, "Registro creado exitosamente");
   } catch (e) {
@@ -106,7 +107,8 @@ function handleUpdate(entity, id, rawData, responsable) {
                 }
             }
             
-            createAlerta(entity, 'MODIFICACIÓN', `Actualizado registro en ${entity}: ${id}`, responsable);
+            createAlerta(entity, 'info', `Actualizado registro en ${entity}: ${id}`, responsable, 'editar');
+            registrarAccion(entity, 'editar', `Actualizado registro: ${id}`, 'info', responsable, rawData.justificacion || '');
             return createResponse(true, null, "Registro actualizado");
         }
     }

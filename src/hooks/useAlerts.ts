@@ -117,9 +117,9 @@ export function useAlerts() {
 
             generatedAlerts.push({
                 id: a.id,
-                titulo: accion === 'solicitud_eliminacion' ? '🔒 Solicitud de Eliminación' : `${accion.charAt(0).toUpperCase() + accion.slice(1)} en ${a.modulo}`,
+                titulo: (accion === 'solicitud_eliminacion' || accion === 'solicitud') ? '🔒 Solicitud de Eliminación' : `${accion.charAt(0).toUpperCase() + accion.slice(1)} en ${a.modulo}`,
                 mensaje: mensaje,
-                tipo: a.tipo || 'info',
+                tipo: (accion === 'solicitud_eliminacion' || accion === 'solicitud') ? 'critical' : (a.tipo || 'info'),
                 fecha: displayDate,
                 origen: a.modulo || 'Sistema',
                 accion: accion,

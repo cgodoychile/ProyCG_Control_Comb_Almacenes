@@ -20,7 +20,8 @@ import {
     Search,
     FileText,
     Camera,
-    Printer
+    Printer,
+    User
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -50,10 +51,13 @@ interface AlmacenesModuleProps {
 import { ProductTrackingDialog } from './ProductTrackingDialog';
 import { GlobalProductSearchDialog } from './GlobalProductSearchDialog';
 import { ConfirmDeleteWithJustificationDialog } from '@/components/shared/ConfirmDeleteWithJustificationDialog';
+import { personasApi } from '@/lib/apiService';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
     const { toast } = useToast();
     const { canEdit, isAdmin, user } = useAuth();
+    console.log('🏗️ [AlmacenesModule] Rendering...', { hasUser: !!user, canEdit });
     const queryClient = useQueryClient();
     const { execute, loading: isActionLoading } = useApi();
 
@@ -79,6 +83,7 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
     const labelRef = useRef<HTMLDivElement>(null);
     const printRef = useRef<HTMLDivElement>(null);
     const [printingData, setPrintingData] = useState<any>(null);
+    const [recipientSelector, setRecipientSelector] = useState<{ open: boolean, product: any }>({ open: false, product: null });
 
     const handlePrintActa = useReactToPrint({
         contentRef: printRef,
@@ -103,6 +108,14 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
         queryFn: almacenesApi.getAll
     });
 
+    // Fetch personas for recipient selection
+    const { data: personasResponse } = useQuery({
+        queryKey: ['personas'],
+        queryFn: personasApi.getAll
+    });
+
+    const personas = personasResponse?.data || [];
+
     const almacenes = almacenesResponse?.data || [];
 
     // Fetch productos for selected warehouse
@@ -114,8 +127,8 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
 
     const productos = productosResponse?.data || [];
     const filteredProductos = productos.filter((p: any) =>
-        p.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.categoria.toLowerCase().includes(searchTerm.toLowerCase())
+        (p.nombre || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p.categoria || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     // Fetch movimientos for selected warehouse
@@ -138,7 +151,7 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
             String(m.productoId || '').toLowerCase().includes(searchTerm.toLowerCase());
 
         const matchesFilter = movimientoFilter === 'todos' ||
-            (m.tipo && m.tipo.toLowerCase() === movimientoFilter);
+            (m.tipo && m.tipo.toLowerCase() === movimientoFilter.toLowerCase());
         return matchesSearch && matchesFilter;
     }).sort((a: any, b: any) => {
         const dateA = new Date(a.fecha).getTime();
@@ -790,24 +803,10 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                                                         <Button
                                                             variant="outline"
                                                             size="icon"
-                                                            className="h-8 w-8 text-orange-500 border-orange-500/30 hover:bg-orange-500/10 hover:border-orange-500 hover:text-orange-600 transition-all duration-300 shadow-sm"
-                                                            onClick={async (e) => {
+                                                            className="h-8 w-8 text-primary border-primary/30 hover:bg-primary/10 hover:border-primary transition-all duration-300 shadow-sm"
+                                                            onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                const payload = {
-                                                                    activoId: producto.id,
-                                                                    responsable: producto.responsable || user?.name || 'Responsable',
-                                                                    fecha: new Date().toLocaleDateString('es-CL'),
-                                                                    cargo: 'Responsable de Inventario',
-                                                                    equipo: producto.nombre,
-                                                                    serie: producto.id,
-                                                                    marca: producto.marca,
-                                                                    modelo: producto.modelo
-                                                                };
-
-                                                                await execute(actasApi.generateCargo(payload), {
-                                                                    successMessage: "✅ Hoja de Cargo generada correctamente.",
-                                                                    onSuccess: () => triggerPrint(payload)
-                                                                });
+                                                                setRecipientSelector({ open: true, product: producto });
                                                             }}
                                                             title="Generar e Imprimir Hoja de Cargo"
                                                         >
@@ -848,7 +847,7 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                                                             size="icon"
                                                             className="h-8 w-8 text-destructive"
                                                             onClick={() => {
-                                                                setItemToDelete({ id: producto.id, type: 'producto', name: producto.nombre });
+                                                                setItemToDelete({ id: producto.id, type: 'producto', name: producto.nombre || 'Producto sin nombre' });
                                                                 setIsDeleteConfirmOpen(true);
                                                             }}
                                                         >
@@ -888,7 +887,16 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
 
                                         return (
                                             <tr key={m.id} className="hover:bg-primary/5 transition-colors">
-                                                <td className="px-6 py-4 whitespace-nowrap">{new Date(m.fecha).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Santiago' })}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    {m.fecha ? new Date(m.fecha).toLocaleString('es-CL', {
+                                                        day: '2-digit',
+                                                        month: '2-digit',
+                                                        year: 'numeric',
+                                                        hour: '2-digit',
+                                                        minute: '2-digit',
+                                                        timeZone: 'America/Santiago'
+                                                    }) : '-'}
+                                                </td>
                                                 <td className="px-6 py-4">
                                                     <span className={cn(
                                                         "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase",
@@ -1096,6 +1104,55 @@ export function AlmacenesModule({ globalSearch = "" }: AlmacenesModuleProps) {
                 onClose={() => setIsScannerOpen(false)}
                 onScan={handleScanCode}
             />
+
+            <Dialog open={recipientSelector.open} onOpenChange={(open) => setRecipientSelector(prev => ({ ...prev, open }))}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <User className="w-5 h-5 text-primary" />
+                            Seleccionar Receptor
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="py-4 space-y-4">
+                        <p className="text-xs text-muted-foreground">Seleccione la persona que recibirá el producto <strong>{recipientSelector.product?.nombre}</strong>.</p>
+                        <ScrollArea className="h-[300px] pr-4">
+                            <div className="space-y-2">
+                                {personas.map((persona: any) => (
+                                    <Button
+                                        key={persona.id}
+                                        variant="outline"
+                                        className="w-full justify-start h-auto py-3 px-4 hover:border-primary hover:bg-primary/5 group transition-all"
+                                        onClick={async () => {
+                                            const payload = {
+                                                activoId: recipientSelector.product.id,
+                                                responsable: persona.nombreCompleto || persona.nombre,
+                                                fecha: new Date().toLocaleDateString('es-CL'),
+                                                cargo: persona.cargo || persona.rol || 'Personal Autorizado',
+                                                equipo: recipientSelector.product.nombre,
+                                                serie: recipientSelector.product.id,
+                                                marca: recipientSelector.product.marca,
+                                                modelo: recipientSelector.product.modelo,
+                                                empresa: persona.empresa || 'Enel Chile'
+                                            };
+
+                                            setRecipientSelector({ open: false, product: null });
+                                            await execute(actasApi.generateCargo(payload), {
+                                                successMessage: "✅ Hoja de Cargo generada exitosamente.",
+                                                onSuccess: () => triggerPrint(payload)
+                                            });
+                                        }}
+                                    >
+                                        <div className="flex flex-col items-start text-left">
+                                            <span className="font-bold text-sm group-hover:text-primary">{persona.nombreCompleto || persona.nombre}</span>
+                                            <span className="text-[10px] text-muted-foreground uppercase">{persona.cargo || persona.rol || 'Sin cargo'} - {persona.empresa || 'Enel'}</span>
+                                        </div>
+                                    </Button>
+                                ))}
+                            </div>
+                        </ScrollArea>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             <ConfirmDeleteWithJustificationDialog
                 open={isDeleteConfirmOpen}

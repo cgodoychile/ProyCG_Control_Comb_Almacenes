@@ -22,10 +22,10 @@ export const PrintableCargoForm = forwardRef<HTMLDivElement, PrintableCargoFormP
     return (
         <div ref={ref} className="p-10 bg-white text-slate-900 min-h-[297mm] font-sans print:p-6 relative overflow-hidden">
             {/* Background elements for corporate feel */}
-            <div className="absolute -top-40 -right-40 w-96 h-96 bg-orange-50 rounded-full blur-3xl opacity-30" />
+            <div className="absolute -top-40 -right-40 w-96 h-96 bg-primary/5 rounded-full blur-3xl opacity-30" />
 
             {/* Header / Letterhead */}
-            <div className="flex justify-between items-center border-b-4 border-orange-500 pb-6 mb-8 relative z-10">
+            <div className="flex justify-between items-center border-b-4 border-primary pb-6 mb-8 relative z-10">
                 <div className="flex items-center gap-6">
                     <img
                         src="/LogoCorpEnel.png"
@@ -45,22 +45,22 @@ export const PrintableCargoForm = forwardRef<HTMLDivElement, PrintableCargoFormP
             <div className="grid grid-cols-4 gap-4 mb-8">
                 <div className="col-span-3 bg-slate-50 border border-slate-200 p-4 rounded-xl flex justify-between items-center">
                     <div>
-                        <span className="text-[9px] font-black text-orange-600 uppercase block tracking-widest mb-1">Entidad Emisora</span>
+                        <span className="text-[9px] font-black text-primary uppercase block tracking-widest mb-1">Entidad Emisora</span>
                         <span className="text-sm font-bold opacity-90 uppercase">Enel Generación Chile S.A.</span>
                     </div>
                     <div className="h-8 w-px bg-slate-300" />
                     <div>
-                        <span className="text-[9px] font-black text-orange-600 uppercase block tracking-widest mb-1">Fecha Emisión</span>
+                        <span className="text-[9px] font-black text-primary uppercase block tracking-widest mb-1">Fecha Emisión</span>
                         <span className="text-sm font-bold opacity-90">{data.fecha}</span>
                     </div>
                     <div className="h-8 w-px bg-slate-300" />
                     <div className="text-right">
-                        <span className="text-[9px] font-black text-orange-600 uppercase block tracking-widest mb-1">Estado</span>
+                        <span className="text-[9px] font-black text-primary uppercase block tracking-widest mb-1">Estado</span>
                         <span className="text-xs font-black text-slate-900">CERTIFICADA</span>
                     </div>
                 </div>
-                <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 flex flex-col justify-center items-center">
-                    <span className="text-[9px] font-black text-orange-400 uppercase block tracking-widest mb-1">Folio</span>
+                <div className="bg-primary/5 p-4 rounded-xl border border-primary/10 flex flex-col justify-center items-center">
+                    <span className="text-[9px] font-black text-primary uppercase block tracking-widest mb-1">Folio</span>
                     <span className="text-base font-mono font-black text-slate-900 truncate w-full text-center">
                         {data.documentoId || `AC-${Math.floor(Date.now() / 10000)}`}
                     </span>
@@ -68,7 +68,7 @@ export const PrintableCargoForm = forwardRef<HTMLDivElement, PrintableCargoFormP
             </div>
 
             {/* Legal Clause - More Compact */}
-            <div className="mb-10 px-4 border-l-2 border-orange-500">
+            <div className="mb-10 px-4 border-l-2 border-primary">
                 <p className="text-base text-slate-700 leading-tight">
                     El receptor declara haber recibido el recurso detallado a continuación en óptimas condiciones. Se asume la **total responsabilidad** por su custodia y uso exclusivo en actividades laborales de **Enel Chile**.
                 </p>
@@ -79,7 +79,7 @@ export const PrintableCargoForm = forwardRef<HTMLDivElement, PrintableCargoFormP
                 {/* Column 1: Holder */}
                 <div className="space-y-6">
                     <div className="flex items-center gap-3 border-b border-slate-100 pb-2">
-                        <User className="w-5 h-5 text-orange-600" />
+                        <User className="w-5 h-5 text-primary" />
                         <h3 className="text-sm font-black uppercase tracking-tighter text-slate-900">Identificación del Receptor</h3>
                     </div>
                     <div className="space-y-3">
@@ -97,7 +97,7 @@ export const PrintableCargoForm = forwardRef<HTMLDivElement, PrintableCargoFormP
                 {/* Column 2: Equipment */}
                 <div className="space-y-6">
                     <div className="flex items-center gap-3 border-b border-slate-100 pb-2">
-                        <Package className="w-5 h-5 text-orange-600" />
+                        <Package className="w-5 h-5 text-primary" />
                         <h3 className="text-sm font-black uppercase tracking-tighter text-slate-900">Detalles del Equipo</h3>
                     </div>
                     <div className="space-y-4">
@@ -112,7 +112,7 @@ export const PrintableCargoForm = forwardRef<HTMLDivElement, PrintableCargoFormP
                             </div>
                             <div>
                                 <label className="text-[9px] uppercase font-black text-slate-400 block mb-0.5">ID / Patente</label>
-                                <p className="text-xs font-mono font-black text-orange-600">{data.patente || data.serie || '-'}</p>
+                                <p className="text-xs font-mono font-black text-primary">{data.patente || data.serie || '-'}</p>
                             </div>
                         </div>
                     </div>
@@ -150,7 +150,7 @@ export const PrintableCargoForm = forwardRef<HTMLDivElement, PrintableCargoFormP
                 <div className="text-center">
                     <div className="h-0.5 bg-slate-300 w-full mb-3" />
                     <p className="text-xs font-black uppercase text-slate-900">Dpto. Control Activos</p>
-                    <p className="text-[8px] font-bold text-orange-500 uppercase tracking-widest mt-1">Enel Chile</p>
+                    <p className="text-[8px] font-bold text-accent uppercase tracking-widest mt-1">Enel Chile</p>
                 </div>
             </div>
 

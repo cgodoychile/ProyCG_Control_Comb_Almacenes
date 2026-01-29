@@ -282,9 +282,9 @@ function deleteProducto(id, data) {
 
         if (deletedCount > 0) {
             SpreadsheetApp.flush();
-            syncWarehouseData(); // Auto-cleanup assignments for deleted products
+            // syncWarehouseData(); // ELIMINADO: Función no definida
             registrarAccion('Almacenes', 'eliminar', `Producto eliminado: ${lastNombre} (ID: ${id}, Instancias: ${deletedCount})`, 'warning', null, data ? data.justificacion : null);
-            createAlerta('warning', `Producto eliminado: ${lastNombre}`, 'Almacenes', 'eliminar');
+            createAlerta('Almacenes', 'warning', `Producto eliminado: ${lastNombre}`, null, 'eliminar');
             return createResponse(true, { message: `Producto eliminado (${deletedCount} instancias)` });
         }
         

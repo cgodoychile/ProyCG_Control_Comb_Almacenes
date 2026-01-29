@@ -15,7 +15,8 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
 
-    --primary: 221.2 83.2% 53.3%;
+    --primary: 196 100% 40%;
+    /* #008BCE Enel blue (adjusted) */
     --primary-foreground: 210 40% 98%;
 
     --secondary: 210 40% 96.1%;
@@ -24,8 +25,16 @@
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 326 100% 44%;
+    /* #E3007F Enel Pink */
+    --accent-foreground: 210 40% 98%;
+
+    --enel-orange: 22 100% 50%;
+    /* #FF5E00 */
+    --enel-green: 148 100% 32%;
+    /* #00A34D */
+    --enel-cyan: 197 100% 47%;
+    /* #00ADEF */
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
@@ -33,7 +42,8 @@
     --success: 142.1 70.6% 45.3%;
     --success-foreground: 210 40% 98%;
 
-    --warning: 47.9 95.8% 51.8%;
+    --warning: 38 100% 50%;
+    /* Enel Orange as warning! */
     --warning-foreground: 222.2 47.4% 11.2%;
 
     --critical: 0 84.2% 60.2%;
@@ -41,9 +51,12 @@
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    --ring: 196 100% 40%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
+
+    --gradient-enel: linear-gradient(135deg, #008BCE 0%, #00ADEF 25%, #00A34D 50%, #FFCE00 75%, #FF5E00 100%);
+    --gradient-vibrant: linear-gradient(135deg, #FF5E00 0%, #E3007F 100%);
   }
 
   .dark {
@@ -219,11 +232,20 @@
 
   /* KPI value styling */
   .kpi-value {
-    @apply text-4xl font-bold tracking-tight;
-    background: var(--gradient-fuel);
+    @apply text-4xl font-black tracking-tighter;
+    background: linear-gradient(135deg, hsl(var(--primary)) 0%, #E3007F 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+  }
+
+  /* Vibrant Button */
+  .btn-vibrant {
+    @apply bg-gradient-to-r from-[#FF5E00] to-[#E3007F] text-white font-black uppercase tracking-tighter transition-all hover:scale-105 active:scale-95 shadow-lg shadow-orange-500/20;
+  }
+
+  .glass-card {
+    @apply bg-white/10 backdrop-blur-md border border-white/20 shadow-xl;
   }
 
   /* Data table styling */

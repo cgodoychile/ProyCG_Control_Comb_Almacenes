@@ -72,8 +72,8 @@ function setupCompleto() {
       [SHEET_NAMES.PRODUCTOS_ALMACEN]: ['ID', 'Almacen_ID', 'Nombre', 'Categoría', 'Cantidad', 'Unidad', 'Stock_Minimo', 'Valor_Unitario', 'Fecha_Ingreso', 'Proveedor', 'Estado', 'Retornable', 'En Uso', 'Es Activo'],
       [SHEET_NAMES.MOVIMIENTOS_ALMACEN]: ['ID', 'Producto_ID', 'Tipo', 'Origen', 'Destino', 'Cantidad', 'Fecha', 'Responsable', 'Guía', 'Motivo', 'Proveedor', 'Observaciones', 'Fecha Devolución Estimada'],
       [SHEET_NAMES.PERSONAS]: ['RUT/DNI', 'Nombre', 'Cargo', 'Empresa', 'Email', 'Teléfono', 'Estado', 'Fecha Ingreso', 'Observaciones'],
-      [SHEET_NAMES.AUDITORIA]: ['ID', 'Fecha', 'Usuario', 'Módulo', 'Acción', 'Mensaje', 'Tipo'],
-      [SHEET_NAMES.ALERTAS]: ['ID', 'Tipo', 'Mensaje', 'Módulo', 'Fecha', 'Leída', 'Acción']
+      [SHEET_NAMES.AUDITORIA]: ['ID', 'FECHA', 'USUARIO', 'MODULO', 'ACCION', 'MENSAJE', 'TIPO', 'JUSTIFICACION'],
+      [SHEET_NAMES.ALERTAS]: ['ID', 'FECHA', 'TIPO', 'MODULO', 'MENSAJE', 'RESPONSABLE', 'ESTADO', 'ACCION']
     };
 
     Object.entries(hojasNecesarias).forEach(([nombre, headers]) => {
@@ -125,7 +125,19 @@ function repairAllSheetStructures() {
     cSheet.getRange(1, 1, 1, cHeaders.length).setValues([cHeaders]);
     Logger.log('✅ Cabeceras de CARGAS reparadas');
     
-    return "Estructuras reparadas para Almacenes, Estanques y Cargas. Por favor elimine las filas de prueba corruptas manualmente.";
+    // 5. Reparar AUDITORIA
+    const aSheet = getSheet(SHEET_NAMES.AUDITORIA);
+    const aHeaders = ['ID', 'FECHA', 'USUARIO', 'MODULO', 'ACCION', 'MENSAJE', 'TIPO', 'JUSTIFICACION'];
+    aSheet.getRange(1, 1, 1, aHeaders.length).setValues([aHeaders]);
+    Logger.log('✅ Cabeceras de AUDITORIA reparadas');
+    
+    // 6. Reparar ALERTAS
+    const alSheet = getSheet(SHEET_NAMES.ALERTAS);
+    const alHeaders = ['ID', 'FECHA', 'TIPO', 'MODULO', 'MENSAJE', 'RESPONSABLE', 'ESTADO', 'ACCION'];
+    alSheet.getRange(1, 1, 1, alHeaders.length).setValues([alHeaders]);
+    Logger.log('✅ Cabeceras de ALERTAS reparadas');
+
+    return "Estructuras reparadas para Almacenes, Estanques, Cargas, Auditoría y Alertas. Por favor elimine las filas de prueba corruptas manualmente.";
   } catch (e) {
     Logger.log('❌ Error reparando: ' + e.toString());
     return "Error reparando: " + e.toString();

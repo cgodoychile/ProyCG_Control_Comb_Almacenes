@@ -27,7 +27,6 @@ function generateCargoDocument(data) {
     
     // Hardened sheet name reference
     const sheetName = SHEET_NAMES.ACTAS || 'Actas';
-    console.log(`[ActasCRUD] generateCargoDocument - Attempting to get sheet: "${sheetName}"`);
     
     const sheet = getSheet(sheetName);
     const docId = 'ACTA-' + (activoId || 'GEN') + '-' + Date.now();
@@ -38,7 +37,7 @@ function generateCargoDocument(data) {
     };
 
     const newRow = [];
-    newRow[mapping.ID] = generateSequentialId('ACT', sheetName || 'Actas', 'ID');
+    newRow[mapping.ID] = generateSequentialId('ACT', sheetName, 'ID');
     newRow[mapping.FECHA] = fecha || new Date().toLocaleDateString('es-CL');
     newRow[mapping.RESPONSABLE] = responsable;
     newRow[mapping.CARGO] = cargo || 'Operario / Responsable';
@@ -51,25 +50,13 @@ function generateCargoDocument(data) {
 
     sheet.appendRow(newRow);
     
-    registrarAccion('Actas', 'generar', `Acta de Cargo generada: ${docId}`, 'success');
+    registrarAccion('Actas', 'generar', "Acta de Cargo generada: " + docId, 'success');
     
     return createResponse(true, { 
       message: 'Acta generada y guardada exitosamente',
-      documentId: docId,
-      details: {
-        titulo: "ACTA DE ASIGNACIÓN Y CARGO DE EQUIPO",
-        empresa: "ENEL - OPERACIONES CHILE",
-        fecha: newRow[mapping.FECHA],
-        responsable,
-        cargo: newRow[mapping.CARGO],
-        equipo: newRow[mapping.EQUIPO],
-        marca: newRow[mapping.MARCA],
-        modelo: newRow[mapping.MODELO],
-        serie: newRow[mapping.SERIE_PATENTE]
-      }
+      documentId: docId
     });
   } catch (error) {
-    console.error(`[ActasCRUD] Error in generateCargoDocument: ${error.toString()}`);
     return createResponse(false, null, error.toString());
   }
 }

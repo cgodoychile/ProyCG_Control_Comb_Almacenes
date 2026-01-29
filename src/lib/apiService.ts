@@ -24,6 +24,7 @@ const createCrudApi = <T>(entity: string) => ({
     create: (data: Partial<T>) => apiFetch<T>(entity, 'create', { method: 'POST', body: data }),
     update: (id: string, data: Partial<T>) => apiFetch<T>(entity, 'update', { id, method: 'POST', body: data }),
     delete: (id: string, body: any = {}) => apiFetch<{ message: string }>(entity, 'delete', { id, method: 'POST', body }),
+    post: (action: string, body: any = {}) => apiFetch<any>(entity, action, { method: 'POST', body }),
 });
 
 // Cargas API
@@ -72,7 +73,7 @@ export const activosApi = {
 export const mantencionesApi = createCrudApi<Mantencion>('mantenciones');
 export const almacenesApi = createCrudApi<Almacen>('almacenes');
 export const alertasApi = createCrudApi<Alerta>('alertas');
-export const auditoriaApi = createCrudApi<AuditoriaLog>('alertas'); // Usamos alertas como auditoría
+export const auditoriaApi = createCrudApi<AuditoriaLog>('auditoria');
 export const usuariosApi = createCrudApi<Usuario>('usuarios');
 export const actasApi = {
     getAll: () => apiFetch<any[]>('actas', 'get_all'),

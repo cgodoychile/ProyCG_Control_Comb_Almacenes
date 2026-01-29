@@ -130,6 +130,7 @@ function findColumnIndices(sheet, mapping) {
     result[key] = foundIdx;
   }
   
+  console.log(`[INDICES] Sheet: ${sheet.getName()}, Result:`, JSON.stringify(result));
   return result;
 }
 
@@ -177,30 +178,43 @@ function checkIdempotency(sheet, clientRequestId, idIdx) {
 
 function registrarAccion(modulo, accion, mensaje, tipo, usuario, justificacion) {
   try {
-    const sheetName = (typeof SHEET_NAMES !== 'undefined' && SHEET_NAMES.AUDITORIA) ? SHEET_NAMES.AUDITORIA : 'Auditoria';
-    const sheet = getSheet(sheetName);
-    const mapping = (typeof COLUMNS !== 'undefined') ? COLUMNS.AUDITORIA : null;
-    
-    // Si mapping no existe (Config desactualizada), prevenimos el crash
-    if (!mapping) {
-      console.warn("COLUMNS.AUDITORIA no definido. Usando mapeo por defecto.");
+    const ss = SpreadsheetApp.openById(SPREADSHEETID);
+    let sheet = ss.getSheetByName('Auditoria') || ss.getSheetByName('Auditoría');
+    if (!sheet) {
+      sheet = ss.insertSheet('Auditoria');
+      sheet.appendRow(['ID', 'FECHA', 'USUARIO', 'MODULO', 'ACCION', 'MENSAJE', 'TIPO', 'JUSTIFICACION']);
     }
+
+    // EL ID SIEMPRE SE GENERA AUTOMATICAMENTE (v8.5)
+    // Buscamos la columna para el ID o usamos 0 por defecto
+    const id = generateSequentialId('AUD', 'Auditoria', 'ID', 5);
+    const fecha = new Date();
     
-    const id = generateSequentialId('LOG', sheetName, 'ID', 6);
+    // MAPEO POSICIONAL ESTRICTO v8.5 (Indestructible)
+    // 0: ID, 1: FECHA, 2: USUARIO, 3: MODULO, 4: ACCION, 5: MENSAJE, 6: TIPO, 7: JUSTIFICACION
+    const newRow = Array(8).fill('');
+    newRow[0] = id;
+    newRow[1] = fecha;
+    newRow[2] = usuario || 'Sistema';
+    newRow[3] = (modulo || 'Sistema').charAt(0).toUpperCase() + (modulo || 'Sistema').slice(1).toLowerCase();
+    newRow[4] = (accion || 'acción').toLowerCase();
+    newRow[5] = String(mensaje || '');
+    newRow[6] = (tipo || 'info').toLowerCase();
+    newRow[7] = justificacion || '';
     
-    const headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 7)).getValues()[0];
-    const newRow = Array(headers.length || 7).fill('');
-    const idIdx = (mapping && mapping.ID !== undefined) ? mapping.ID : 0;
+    // Afinamiento de Justificación (v8.5)
+    if (newRow[5].includes(' | Justificación:')) {
+      const parts = newRow[5].split(' | Justificación:');
+      newRow[5] = parts[0];
+      if (!newRow[7]) newRow[7] = parts[1];
+    }
+
+    const lastRow = sheet.getLastRow();
+    // Siempre escribimos exactamente en las columnas A hasta H del siguiente registro
+    sheet.getRange(lastRow + 1, 1, 1, 8).setValues([newRow]);
     
-    newRow[idIdx] = id;
-    newRow[(mapping && mapping.FECHA !== undefined) ? mapping.FECHA : 1] = new Date();
-    newRow[(mapping && mapping.USUARIO !== undefined) ? mapping.USUARIO : 2] = usuario || 'Sistema';
-    newRow[(mapping && mapping.ACCION !== undefined) ? mapping.ACCION : 3] = accion;
-    newRow[(mapping && mapping.DETALLE !== undefined) ? mapping.DETALLE : 5] = mensaje + (justificacion ? ' | Justificación: ' + justificacion : '');
-    newRow[(mapping && mapping.ENTIDAD !== undefined) ? mapping.ENTIDAD : 4] = modulo;
-    newRow[(mapping && mapping.ESTADO !== undefined) ? mapping.ESTADO : 6] = tipo || 'info';
-    
-    sheet.appendRow(newRow);
+    SpreadsheetApp.flush();
+    console.log(`[Auditoria] Registro OK: ${id}`);
     return true;
   } catch (e) {
     console.error("Error en registrarAccion: " + e.toString());

@@ -54,6 +54,8 @@ function doGet(e) {
       result = typeof handlePersonasGet === 'function' ? handlePersonasGet(action, id) : handleGetAll(entity);
     } else if (entity === 'actas') {
       result = typeof handleActasGet === 'function' ? handleActasGet(action, id) : handleGetAll('ACTAS');
+    } else if (entity === 'auditoria') {
+      result = typeof handleAuditoriaGet === 'function' ? handleAuditoriaGet(action, id) : handleGetAll('AUDITORIA');
     } else {
       result = handleGetAll(entity);
     }
@@ -86,6 +88,8 @@ function doPost(e) {
       result = typeof handleLogin === 'function' ? handleLogin(body.email, body.password) : createErrorResponse("Módulo Login no cargado");
     } else if (entity === 'alertas' && action === 'seen') {
       result = typeof markAlertaAsSeen === 'function' ? markAlertaAsSeen(id) : createErrorResponse("Módulo Alertas no cargado");
+    } else if (entity === 'alertas' && action === 'repair') {
+      result = typeof repairAlertasData === 'function' ? repairAlertasData() : createErrorResponse("Módulo Alertas no cargado");
     } else if (entity === 'cargas') {
       result = typeof handleCargasPost === 'function' ? handleCargasPost(action, id, body) : createErrorResponse("Módulo Cargas no cargado");
     } else if (entity === 'agendamientos') {
@@ -107,6 +111,8 @@ function doPost(e) {
       result = typeof handleProductosPost === 'function' ? handleProductosPost(action, id, body) : createErrorResponse("Módulo Productos no cargado");
     } else if (entity === 'personas') {
       result = typeof handlePersonasPost === 'function' ? handlePersonasPost(action, id, body) : createErrorResponse("Módulo Personas no cargado");
+    } else if (entity === 'auditoria') {
+      result = typeof handleAuditoriaPost === 'function' ? handleAuditoriaPost(action, id, body) : handleCreate('AUDITORIA', body, responsable);
     } else {
       // Manejo unificado vía BaseCRUD o acciones genéricas
       if (action === 'delete') {

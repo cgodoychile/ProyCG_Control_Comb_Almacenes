@@ -36,7 +36,8 @@ import {
     Edit,
     Trash2,
     Plus,
-    AlertTriangle
+    AlertTriangle,
+    Wand2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -69,7 +70,9 @@ export function AuditoriaModule() {
         refetchInterval: 30000,
     });
 
-    const auditLogs = auditResponse?.data || [];
+    const rawLogs = auditResponse?.data || [];
+
+    const auditLogs = rawLogs;
 
     // Calculate stats
     const totalActions = auditLogs.length;
@@ -79,22 +82,34 @@ export function AuditoriaModule() {
 
     // Trend Data for Chart
     const trendData = useMemo(() => {
-        const last15Days = [...Array(15)].map((_, i) => {
-            const d = new Date();
-            d.setDate(d.getDate() - i);
-            return d.toISOString().split('T')[0];
-        }).reverse();
+        try {
+            const last15Days = [...Array(15)].map((_, i) => {
+                const d = new Date();
+                d.setDate(d.getDate() - i);
+                return d.toISOString().split('T')[0];
+            }).reverse();
 
-        const counts: { [key: string]: number } = {};
-        auditLogs.forEach(log => {
-            const date = new Date(log.fecha).toISOString().split('T')[0];
-            counts[date] = (counts[date] || 0) + 1;
-        });
+            const counts: { [key: string]: number } = {};
+            auditLogs.forEach(log => {
+                if (!log.fecha) return;
+                try {
+                    const d = new Date(log.fecha);
+                    if (isNaN(d.getTime())) return;
+                    const dateStr = d.toISOString().split('T')[0];
+                    counts[dateStr] = (counts[dateStr] || 0) + 1;
+                } catch (e) {
+                    // skip invalid dates
+                }
+            });
 
-        return last15Days.map(date => ({
-            date: date.split('-').slice(1).reverse().join('/'),
-            acciones: counts[date] || 0
-        }));
+            return last15Days.map(date => ({
+                date: date.split('-').slice(1).reverse().join('/'),
+                acciones: counts[date] || 0
+            }));
+        } catch (err) {
+            console.error('Critical error calculating trendData:', err);
+            return [];
+        }
     }, [auditLogs]);
 
 
@@ -112,11 +127,11 @@ export function AuditoriaModule() {
         }
 
         if (selectedModule !== 'todos') {
-            logs = logs.filter(log => log.modulo === selectedModule);
+            logs = logs.filter(log => log.modulo?.toLowerCase() === selectedModule.toLowerCase());
         }
 
         if (selectedAction !== 'todas') {
-            logs = logs.filter(log => log.accionRealizada === selectedAction);
+            logs = logs.filter(log => log.accionRealizada?.toLowerCase() === selectedAction.toLowerCase());
         }
 
         if (fechaDesde && fechaHasta) {
@@ -270,8 +285,10 @@ export function AuditoriaModule() {
     };
 
     const formatDate = (dateString: string) => {
+        if (!dateString || dateString === '-' || dateString === 'N/A') return 'Fecha no disp.';
         try {
             const date = new Date(dateString);
+            if (isNaN(date.getTime())) return dateString;
             return date.toLocaleString('es-CL', {
                 day: '2-digit',
                 month: '2-digit',
@@ -298,47 +315,67 @@ export function AuditoriaModule() {
             {/* Header */}
             <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
                 <div>
-                    <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-                        <Shield className="w-6 h-6 text-accent" />
-                        Auditoría del Sistema
+                    <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2 text-orange-500">
+                        <Shield className="w-6 h-6" />
+                        Auditoría del Sistema (v8.7)
                     </h2>
-                    <p className="text-muted-foreground">
-                        Registro completo de acciones y cambios en el sistema
+                    <p className="text-muted-foreground text-sm font-medium">
+                        Sincronización Absoluta A1-H8 (Mapeo Posicional v8.7)
                     </p>
                 </div>
-                <div className="flex flex-col sm:flex-row items-center gap-2">
-                    <DateRangeFilter
-                        onFilterChange={(desde, hasta) => {
-                            setFechaDesde(desde);
-                            setFechaHasta(hasta);
-                        }}
-                    />
+                {isAdmin && (
                     <Button
+                        variant="default"
                         size="sm"
-                        variant="outline"
-                        className="gap-2 border-accent text-accent hover:bg-accent/10 h-10"
-                        onClick={() => {
-                            const columns = ['Fecha', 'Acción', 'Módulo', 'Descripción', 'Usuario', 'Tipo'];
-                            const data = filteredLogs.map(log => [
-                                formatDate(log.fecha),
-                                getActionLabel(log.accionRealizada || ''),
-                                log.modulo || 'Sistema',
-                                log.mensaje || '',
-                                log.usuario || 'Sistema',
-                                getTypeLabel(log.tipo || '')
-                            ]);
-                            import('@/utils/pdfExport').then(m => m.generatePDF('Auditoría de Sistema', data, columns));
+                        className="gap-2 bg-orange-500 hover:bg-orange-600 text-white font-bold shadow-md"
+                        onClick={async () => {
+                            if (window.confirm("¿Deseas intentar reparar automáticamente los datos desplazados en la hoja de Google Sheets?")) {
+                                await execute(auditoriaApi.post('repair'), {
+                                    successMessage: "Reparación v8.7 completada",
+                                    onSuccess: () => queryClient.invalidateQueries()
+                                });
+                            }
                         }}
+                        disabled={isActionLoading}
                     >
-                        <Download className="w-4 h-4" />
-                        Exportar PDF
+                        <Wand2 className="w-4 h-4" />
+                        REPARAR ALINEACIÓN (v8.7)
                     </Button>
-                </div>
+                )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-2">
+                <DateRangeFilter
+                    onFilterChange={(desde, hasta) => {
+                        setFechaDesde(desde);
+                        setFechaHasta(hasta);
+                    }}
+                />
+                <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-2 border-accent text-accent hover:bg-accent/10 h-10"
+                    onClick={() => {
+                        const columns = ['Fecha', 'Acción', 'Módulo', 'Descripción', 'Usuario', 'Tipo'];
+                        const data = filteredLogs.map(log => [
+                            formatDate(log.fecha),
+                            getActionLabel(log.accionRealizada || ''),
+                            log.modulo || 'Sistema',
+                            log.mensaje || '',
+                            log.usuario || 'Sistema',
+                            getTypeLabel(log.tipo || '')
+                        ]);
+                        import('@/utils/pdfExport').then(m => m.generatePDF('Auditoría de Sistema', data, columns));
+                    }}
+                >
+                    <Download className="w-4 h-4" />
+                    Exportar PDF
+                </Button>
             </div>
 
             {/* KPI y Gráfico de Tendencias */}
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                <div className="lg:col-span-1 grid grid-cols-1 gap-4">
+                <div className="lg:col-span-1 grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-4">
                     <KPICard
                         title="Total Acciones"
                         value={totalActions.toString()}
@@ -353,7 +390,11 @@ export function AuditoriaModule() {
                     />
                     <KPICard
                         title="Última Actividad"
-                        value={auditLogs[0] ? new Date(auditLogs[0].fecha).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                        value={(() => {
+                            if (!auditLogs || auditLogs.length === 0) return '--:--';
+                            const d = new Date(auditLogs[0].fecha);
+                            return isNaN(d.getTime()) ? '--:--' : d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+                        })()}
                         icon={Activity}
                         variant="accent"
                     />
@@ -441,8 +482,12 @@ export function AuditoriaModule() {
                         <SelectItem value="todas">Todas las acciones</SelectItem>
                         <SelectItem value="crear">Crear</SelectItem>
                         <SelectItem value="actualizar">Actualizar</SelectItem>
+                        <SelectItem value="editar">Editar</SelectItem>
                         <SelectItem value="eliminar">Eliminar</SelectItem>
+                        <SelectItem value="solicitud_eliminacion">Solicitud Eliminación</SelectItem>
                         <SelectItem value="ver">Ver</SelectItem>
+                        <SelectItem value="generar">Generar</SelectItem>
+                        <SelectItem value="movimiento">Movimiento</SelectItem>
                     </SelectContent>
                 </Select>
 
@@ -454,19 +499,20 @@ export function AuditoriaModule() {
                     <table className="data-table">
                         <thead className="bg-secondary/50">
                             <tr>
+                                <th className="w-[120px]">ID</th>
                                 <th className="w-[180px]">Fecha/Hora</th>
-                                <th className="w-[100px]">Acción</th>
-                                <th className="w-[120px]">Módulo</th>
-                                <th>Descripción</th>
                                 <th className="w-[150px]">Usuario</th>
+                                <th className="w-[120px]">Módulo</th>
+                                <th className="w-[120px]">Acción</th>
+                                <th>Descripción</th>
                                 <th className="w-[80px]">Tipo</th>
-                                {isAdmin && <th className="w-[100px] text-right">Acciones</th>}
+                                <th className="w-[100px] text-right">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
                             {paginatedLogs.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="text-center py-8 text-muted-foreground">
+                                    <td colSpan={8} className="text-center py-8 text-muted-foreground">
                                         {searchTerm ? 'No se encontraron resultados' : 'No hay registros de auditoría'}
                                     </td>
                                 </tr>
@@ -476,9 +522,28 @@ export function AuditoriaModule() {
                                         key={log.id || index}
                                         className="animate-fade-in text-sm hover:bg-muted/50 transition-colors"
                                     >
+                                        {/* 0. ID (A) */}
+                                        <td className="font-mono text-[10px] text-muted-foreground">
+                                            {log.id}
+                                        </td>
+                                        {/* 1. FECHA (B) */}
                                         <td className="font-mono text-xs">
                                             {formatDate(log.fecha)}
                                         </td>
+                                        {/* 2. USUARIO (C) */}
+                                        <td className="text-muted-foreground">
+                                            <div className="flex items-center gap-2">
+                                                <User className="w-3 h-3" />
+                                                <span className="text-xs">{log.usuario || 'Sistema'}</span>
+                                            </div>
+                                        </td>
+                                        {/* 3. MODULO (D) */}
+                                        <td>
+                                            <span className="px-2 py-0.5 rounded-full bg-secondary text-[10px] font-bold uppercase">
+                                                {log.modulo || 'Sistema'}
+                                            </span>
+                                        </td>
+                                        {/* 4. ACCIÓN (E) */}
                                         <td>
                                             <div className={cn(
                                                 "flex items-center gap-2 font-medium",
@@ -488,22 +553,12 @@ export function AuditoriaModule() {
                                                 <span className="capitalize">{getActionLabel(log.accionRealizada || '')}</span>
                                             </div>
                                         </td>
-                                        <td>
-                                            <span className="px-2 py-0.5 rounded-full bg-secondary text-[10px] font-bold uppercase">
-                                                {log.modulo || 'Sistema'}
-                                            </span>
-                                        </td>
+                                        {/* 5. DESCRIPCIÓN (F) */}
                                         <td className="text-foreground">
                                             {(() => {
                                                 const msg = log.mensaje || '';
+                                                const just = log.justificacion || '';
                                                 let jsonToParse = msg;
-                                                let tail = '';
-
-                                                if (msg.includes(' | Justificación:')) {
-                                                    const parts = msg.split(' | Justificación:');
-                                                    jsonToParse = parts[0];
-                                                    tail = ` | Justificación: ${parts[1]}`;
-                                                }
 
                                                 if (jsonToParse.trim().startsWith('{')) {
                                                     try {
@@ -513,21 +568,24 @@ export function AuditoriaModule() {
                                                             const friendlyEntity = (entityMap as any)[parsed.entity.toLowerCase()] || parsed.entity;
                                                             return <>
                                                                 <span className="font-semibold text-accent">Solicitud para eliminar {friendlyEntity}:</span> {parsed.name}
-                                                                {parsed.justification && <span className="text-muted-foreground ml-1">- Motivo: {parsed.justification}</span>}
-                                                                {tail && <span className="text-xs italic text-muted-foreground block mt-1">{tail.replace(' | ', '')}</span>}
+                                                                {(parsed.justification || just) && (
+                                                                    <span className="text-muted-foreground ml-1">
+                                                                        - Motivo: {parsed.justification || just}
+                                                                    </span>
+                                                                )}
                                                             </>;
                                                         }
                                                     } catch (e) { /* fallback to raw */ }
                                                 }
-                                                return msg;
+                                                return (
+                                                    <>
+                                                        {msg}
+                                                        {just && <span className="text-xs italic text-muted-foreground block mt-1">Justificación: {just}</span>}
+                                                    </>
+                                                );
                                             })()}
                                         </td>
-                                        <td className="text-muted-foreground">
-                                            <div className="flex items-center gap-2">
-                                                <User className="w-3 h-3" />
-                                                <span className="text-xs">{log.usuario || 'Sistema'}</span>
-                                            </div>
-                                        </td>
+                                        {/* 6. TIPO (G) */}
                                         <td>
                                             <span className={cn(
                                                 "text-[10px] px-2 py-0.5 rounded-full font-bold uppercase",
@@ -539,10 +597,10 @@ export function AuditoriaModule() {
                                                 {getTypeLabel(log.tipo || '')}
                                             </span>
                                         </td>
-                                        {isAdmin && (
-                                            <td className="text-right">
+                                        <td className="text-right">
+                                            <div className="flex justify-end gap-1">
                                                 {log.accionRealizada === 'solicitud_eliminacion' && (
-                                                    <div className="flex justify-end gap-1">
+                                                    <>
                                                         <Button
                                                             size="sm"
                                                             variant="ghost"
@@ -563,10 +621,29 @@ export function AuditoriaModule() {
                                                         >
                                                             <X className="w-4 h-4" />
                                                         </Button>
-                                                    </div>
+                                                    </>
                                                 )}
-                                            </td>
-                                        )}
+                                                {isAdmin && (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                                        onClick={async () => {
+                                                            if (window.confirm("¿Eliminar este registro de auditoría?")) {
+                                                                await execute(auditoriaApi.delete(log.id), {
+                                                                    successMessage: "Registro eliminado",
+                                                                    onSuccess: () => queryClient.invalidateQueries()
+                                                                });
+                                                            }
+                                                        }}
+                                                        title="Eliminar registro"
+                                                        disabled={isActionLoading}
+                                                    >
+                                                        <Trash2 className="w-3 h-3" />
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        </td>
                                     </tr>
                                 ))
                             )}
@@ -619,6 +696,6 @@ export function AuditoriaModule() {
                     <li>Comparación de versiones de datos</li>
                 </ul>
             </div>
-        </div>
+        </div >
     );
 }

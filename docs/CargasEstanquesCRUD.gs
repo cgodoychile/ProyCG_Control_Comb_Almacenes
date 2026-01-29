@@ -89,7 +89,7 @@ function deleteCarga(id, data) {
             }
 
             registrarAccion('Cargas', 'eliminar', `Carga eliminada ID: ${id} (${litros}L devueltos a ${estanque})`, 'warning', null, data?.justificacion);
-            createAlerta('warning', `Carga eliminada ID: ${id}`, 'Cargas', 'eliminar');
+            createAlerta('Cargas', 'warning', `Carga eliminada ID: ${id}`, null, 'eliminar');
             return createResponse(true, null, "Carga eliminada y stock restaurado");
         }
     }
@@ -207,7 +207,7 @@ function createCarga(data) {
     // Audit Log
     registrarAccion('Cargas', 'crear', `Nueva carga (${data.tipo}): ${data.litros}L en ${data.estanque} (ID: ${id})`, 'success', data.responsable);
     
-    createAlerta('success', `Nueva carga (${data.tipo}): ${data.litros}L en ${data.estanque}`, 'Cargas', 'crear');
+    createAlerta('Cargas', 'success', `Nueva carga (${data.tipo}): ${data.litros}L en ${data.estanque}`, data.responsable, 'crear');
     
     // Update Stock Estanque ONLY IF REAL
     if (data.tipo !== 'programada' && data.estanque && data.litros) {

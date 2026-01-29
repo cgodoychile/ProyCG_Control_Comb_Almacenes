@@ -50,6 +50,7 @@ export function MobileNav({ activeModule, onModuleChange }: MobileNavProps) {
         { id: 'almacenes', icon: Warehouse, label: 'Almacenes' },
         { id: 'personas', icon: User, label: 'Personas' },
         { id: 'reportes', icon: FileText, label: 'Reportes' },
+        { id: 'actas', icon: FileText, label: 'Actas de Cargo' },
     ];
 
     if (isAdmin) {

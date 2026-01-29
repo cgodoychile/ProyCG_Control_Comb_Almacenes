@@ -175,9 +175,7 @@ function createVehiculo(data) {
     
     // Log Auditoria
     registrarAccion('Vehículos', 'crear', `Nuevo vehículo registrado: ${cleanId} (${data.marca} ${data.modelo})`, 'success', data.responsable);
-    if (typeof createAlerta === 'function') {
-      createAlerta('Vehículos', 'success', `Vehículo registrado: ${cleanId}`, data.responsable || 'Sistema');
-    }
+      createAlerta('Vehículos', 'success', `Vehículo registrado: ${cleanId}`, data.responsable || 'Sistema', 'crear');
     
     return createResponse(true, { id: cleanId, ...data });
   } catch (error) {
@@ -289,9 +287,7 @@ function deleteVehiculo(id, data) {
             if (typeof registrarAccion === 'function') {
                 registrarAccion('Vehículos', 'eliminar', `Vehículo eliminado: ${rowPat}${syncMsg}`, 'warning', null, data ? data.justificacion : null);
             }
-            if (typeof createAlerta === 'function') {
-                createAlerta('Vehículos', 'warning', `Vehículo eliminado: ${rowPat}`, 'Sistema');
-            }
+                createAlerta('Vehículos', 'warning', `Vehículo eliminado: ${rowPat}`, 'Sistema', 'eliminar');
             
             SpreadsheetApp.flush();
             return createResponse(true, { message: 'Vehículo eliminado' + syncMsg });

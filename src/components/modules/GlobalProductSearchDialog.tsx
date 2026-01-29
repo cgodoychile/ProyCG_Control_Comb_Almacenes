@@ -31,9 +31,9 @@ export function GlobalProductSearchDialog({ open, onClose }: GlobalProductSearch
     const productosData = productos?.data || [];
 
     const filtered = productosData.filter((p: any) =>
-        p.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.categoria.toLowerCase().includes(searchTerm.toLowerCase())
-    ).sort((a: any, b: any) => a.nombre.localeCompare(b.nombre));
+        (p.nombre || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p.categoria || '').toLowerCase().includes(searchTerm.toLowerCase())
+    ).sort((a: any, b: any) => (a.nombre || '').localeCompare(b.nombre || ''));
 
     const getAlmacenName = (id: string) => {
         return almacenes?.data?.find(a => a.id === id)?.nombre || id;

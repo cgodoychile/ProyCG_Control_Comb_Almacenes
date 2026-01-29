@@ -114,7 +114,7 @@ function createActivo(data) {
     }
 
     registrarAccion('Activos', 'crear', `Nuevo activo: ${data.id} (${data.nombre})`, 'success', data.responsable);
-    createAlerta('Activos', 'success', `Activo registrado: ${data.id} - ${data.nombre}`, data.responsable);
+    createAlerta('Activos', 'success', `Activo registrado: ${data.id} - ${data.nombre}`, data.responsable, 'crear');
 
     return createResponse(true, { ...data });
   } catch (error) {
@@ -169,7 +169,7 @@ function deleteActivo(id, data) {
 
     const justificacion = data ? data.justificacion : 'Sin justificación';
     registrarAccion('Activos', 'eliminar', `Activo ${assetName} (${id}) eliminado. Motivo: ${justificacion}`, 'warning', 'Usuario', justificacion);
-    createAlerta('Activos', 'warning', `Activo eliminado: ${assetName} (${id})`, 'Administrador');
+    createAlerta('Activos', 'warning', `Activo eliminado: ${assetName} (${id})`, 'Administrador', 'eliminar');
     return createResponse(true, { message: 'Activo eliminado' });
   } catch (error) {
     return createResponse(false, null, error.toString());

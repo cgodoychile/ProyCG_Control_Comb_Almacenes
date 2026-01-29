@@ -27,42 +27,50 @@ export function BarcodeScanner({ open, onClose, onScan }: BarcodeScannerProps) {
 
     useEffect(() => {
         if (open && !scannerRef.current && !showManualInput) {
-            try {
-                const scanner = new Html5QrcodeScanner(
-                    'qr-reader',
-                    {
-                        fps: 10,
-                        qrbox: { width: 250, height: 250 },
-                        aspectRatio: 1.0,
-                        showTorchButtonIfSupported: true,
-                        showZoomSliderIfSupported: true,
-                    },
-                    false
-                );
+            // Give time for the container to mount
+            const timer = setTimeout(() => {
+                const element = document.getElementById('qr-reader');
+                if (!element) return;
 
-                scanner.render(
-                    (decodedText) => {
-                        setScannedCode(decodedText);
-                        setIsScanning(false);
-                        scanner.clear().catch(console.error);
-                        onScan(decodedText);
-                        setTimeout(() => {
-                            onClose();
-                        }, 1500);
-                    },
-                    (errorMessage) => {
-                        // Silently handle scanning errors
-                        console.debug('Scan error:', errorMessage);
-                    }
-                );
+                try {
+                    const scanner = new Html5QrcodeScanner(
+                        'qr-reader',
+                        {
+                            fps: 10,
+                            qrbox: { width: 250, height: 250 },
+                            aspectRatio: 1.0,
+                            showTorchButtonIfSupported: true,
+                            showZoomSliderIfSupported: true,
+                        },
+                        false
+                    );
 
-                scannerRef.current = scanner;
-                setIsScanning(true);
-            } catch (err: any) {
-                console.error('Scanner initialization error:', err);
-                setError('Error al inicializar escáner: ' + err.message);
-                setShowManualInput(true);
-            }
+                    scanner.render(
+                        (decodedText) => {
+                            setScannedCode(decodedText);
+                            setIsScanning(false);
+                            scanner.clear().catch(console.error);
+                            onScan(decodedText);
+                            setTimeout(() => {
+                                onClose();
+                            }, 1500);
+                        },
+                        (errorMessage) => {
+                            // Silently handle scanning errors
+                            console.debug('Scan error:', errorMessage);
+                        }
+                    );
+
+                    scannerRef.current = scanner;
+                    setIsScanning(true);
+                } catch (err: any) {
+                    console.error('Scanner initialization error:', err);
+                    setError('Error al inicializar escáner: ' + (err.message || String(err)));
+                    setShowManualInput(true);
+                }
+            }, 300);
+
+            return () => clearTimeout(timer);
         }
 
         return () => {

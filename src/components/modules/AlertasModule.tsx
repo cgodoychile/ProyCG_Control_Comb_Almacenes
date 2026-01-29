@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { CheckCheck, AlertTriangle, Info, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
-import { Loader2, Trash2 } from 'lucide-react';
+import { Loader2, Trash2, Wand2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useApi } from '@/hooks/useApi';
 import { alertasApi } from '@/lib/apiService';
@@ -47,7 +47,7 @@ export function AlertasModule() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-foreground">Centro de Alertas</h2>
           <p className="text-muted-foreground">Monitoreo de niveles críticos y vencimientos.</p>
@@ -63,6 +63,25 @@ export function AlertasModule() {
           {activeAlerts.length < alerts.length && (
             <Button variant="outline" size="sm" onClick={handleClearDismissed}>
               Restaurar Ocultas
+            </Button>
+          )}
+          {isAdmin && (
+            <Button
+              variant="default"
+              size="sm"
+              className="gap-2 bg-orange-500 hover:bg-orange-600 text-white font-bold shadow-md"
+              onClick={async () => {
+                if (window.confirm("¿Deseas intentar reparar automáticamente los datos desplazados en la hoja de Alertas?")) {
+                  await execute(alertasApi.post('repair'), {
+                    successMessage: "Reparación Alertas v1.1 completada",
+                    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['activity-alerts'] })
+                  });
+                }
+              }}
+              disabled={isProcessing}
+            >
+              <Wand2 className="w-4 h-4" />
+              REPARAR ALINEACIÓN (v1.1)
             </Button>
           )}
         </div>

@@ -36,34 +36,33 @@ function ensureMantencionesHeaders(sheet) {
 function getAllMantenciones() {
   try {
     const sheet = getSheet(SHEET_NAMES.MANTENCIONES);
-    ensureMantencionesHeaders(sheet);
+    if (!sheet) return createResponse(true, []);
     
     const data = sheet.getDataRange().getValues();
     if (data.length <= 1) return createResponse(true, []);
     
-    const rows = data.slice(1);
-    const mantenciones = rows.map((row) => {
-        const id = row[0]; // ID
-        if (!id) return null;
-
+    // ESTRUCTURA ESTRICTA INDEPENDIENTE DE m (A=0, B=1, ...)
+    const mantenciones = data.slice(1).map((row) => {
+        if (!row[0]) return null;
         return {
-          id: id,
-          fechaIngreso: row[1],           // FECHA_INGRESO (B)
-          vehiculo: row[2],               // VEHICULO (C)
-          tipoMantencion: row[3],          // TIPO_MANTENCION (D)
-          kmActual: row[4],               // KM_ACTUAL (E)
-          proximaMantencionKm: row[5],     // PROXIMA_MANTENCION_KM (F)
-          proximaMantencionFecha: row[6],  // PROXIMA_MANTENCION_FECHA (G)
-          taller: row[7],                 // TALLER (H)
-          costo: row[8],                  // COSTO (I)
-          observaciones: row[9],           // OBSERVACION (J)
-          estado: row[10],                 // ESTADO (K)
-          responsable: row[11]             // RESPONSABLE (L)
+          id: String(row[0]),
+          fechaIngreso: row[1],
+          vehiculo: row[2],
+          tipoMantencion: row[3],
+          kmActual: row[4],
+          proximaMantencionKm: row[5],
+          proximaMantencionFecha: row[6],
+          taller: row[7],
+          costo: row[8],
+          observaciones: row[9],
+          estado: row[10],
+          responsable: row[11]
         };
     }).filter(m => m !== null);
     
     return createResponse(true, mantenciones);
   } catch (error) {
+    console.error('Error en getAllMantenciones v5.1:', error.toString());
     return createResponse(false, null, error.toString());
   }
 }
@@ -100,7 +99,7 @@ function createMantencion(data) {
     
     // Audit Log
     registrarAccion('Mantenciones', 'crear', `Nueva mantención registrada: ${id} para vehículo ${data.vehiculo}`, 'success', data.responsable);
-    createAlerta('Mantenciones', 'success', `Nueva mantención: ${id} (${data.vehiculo})`, data.responsable);
+    createAlerta('Mantenciones', 'success', `Nueva mantención: ${id} (${data.vehiculo})`, data.responsable, 'crear');
     
     // Sync with Vehiculos sheet
     if (data.vehiculo && data.kmActual) {
@@ -230,21 +229,20 @@ function deleteMantencion(id, data) {
     const sheet = getSheet(SHEET_NAMES.MANTENCIONES);
     const dataValues = sheet.getDataRange().getValues();
     
-    const colInfo = findColumnIndices(sheet, { ID: ['ID', 'CODIGO'], VEH: ['VEHICULO'] });
-    const idIdx = (colInfo.ID !== undefined && colInfo.ID !== -1) ? colInfo.ID : 0;
-    const vehIdx = (colInfo.VEH !== undefined && colInfo.VEH !== -1) ? colInfo.VEH : 2;
-
+    // BÚSQUEDA ESTRICTA EN COLUMNA A (0)
     for (let i = 1; i < dataValues.length; i++) {
-        if (String(dataValues[i][idIdx]) === String(id)) {
-            const vehiculo = dataValues[i][vehIdx];
+        const rowId = String(dataValues[i][0]);
+        if (rowId.trim() === String(id).trim()) {
+            const vehiculo = dataValues[i][2] || 'Desconocido';
             sheet.deleteRow(i + 1);
             
             registrarAccion('Mantenciones', 'eliminar', `Mantención eliminada: ${id} (Vehículo: ${vehiculo})`, 'warning', null, data ? data.justificacion : null);
-            return createResponse(true, null, "Mantención eliminada");
+            return createResponse(true, null, "Mantención eliminada exitosamente");
         }
     }
-    throw new Error("ID no encontrado: " + id);
+    throw new Error(`ID ${id} no encontrado en la columna A de Mantenciones.`);
   } catch (error) {
+    console.error('Error en deleteMantencion v5.1:', error.toString());
     return createResponse(false, null, error.toString());
   }
 }

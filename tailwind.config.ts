@@ -43,6 +43,15 @@ export default {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
         },
+        enel: {
+          blue: "#008BCE",
+          pink: "#E3007F",
+          orange: "#FF5E00",
+          green: "#00A34D",
+          cyan: "#00ADEF",
+          yellow: "#FFCE00",
+          purple: "#532E91",
+        },
         popover: {
           DEFAULT: "hsl(var(--popover))",
           foreground: "hsl(var(--popover-foreground))",

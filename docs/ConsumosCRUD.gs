@@ -190,7 +190,7 @@ function createConsumo(data) {
 
     // Audit Log
     registrarAccion('Consumo', 'crear', `Nuevo consumo de ${data.litrosUsados}L para vehículo ${data.vehiculo} (ID: ${id})`, 'success', data.responsable);
-    createAlerta('info', `Nuevo consumo de ${data.litrosUsados}L - ${data.vehiculo}`, 'Consumo', 'crear');
+    createAlerta('Consumo', 'info', `Nuevo consumo de ${data.litrosUsados}L - ${data.vehiculo}`, data.responsable);
 
     return createResponse(true, { id: id, ...data });
   } catch (error) {
@@ -302,7 +302,7 @@ function deleteConsumo(id, data) {
                 
                 // Audit Log
                 registrarAccion('Consumo', 'eliminar', `Eliminado registro de consumo ${id} (Vehículo: ${vehiculo})`, 'warning', null, data ? data.justificacion : null);
-                createAlerta('warning', `Consumo eliminado: ${id} - ${vehiculo}`, 'Consumo', 'eliminar');
+                createAlerta('Consumo', 'warning', `Consumo eliminado: ${id} - ${vehiculo}`, null, 'eliminar');
                 
                 return createResponse(true, { id: 'Consumo eliminado' });
             }
